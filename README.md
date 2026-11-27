@@ -16,7 +16,7 @@ In landscape, push the left stick up to walk where the camera is looking, move i
 
 Use **Enter car** beside the coupe. Hold **Gas** with your right thumb and steer with your left. Use **Brake** to slow down and **Reverse** to back up. The gold marker and radar route lead to your next objective. Tap the radar for the full city map.
 
-Line up in a lane and tap **Set cruise** to hold your speed and keep the car between the lines. Steer through junctions as usual. The HUD shows **You steer** while you have the wheel. After you release steering for a quarter second, cruise straightens out an early or wide turn and centers the car in the outgoing lane. Steer again at any time to correct it yourself.
+Tap **Set cruise** on or beside a street. If you’re on the wrong side, on the shoulder, or facing across the road, cruise steers you into a forward lane and resumes your set speed. At a junction, aim toward the street you want to take. Steer through turns as usual. The HUD shows **You steer** while you have the wheel. After you release steering for a quarter second, cruise centers the car in the outgoing lane.
 
 Use **− / +** to change the set speed by 5 km/h. Tap **Gap** to leave **1, 2, or 3 car lengths** between your front bumper and the car ahead. The default is 2. Cruise slows for turns and traffic and resumes your set speed when the lane clears. Hold **Gas** for a temporary speed override. Brake, reverse, or tap cruise again to cancel.
 

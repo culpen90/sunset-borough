@@ -57,7 +57,69 @@ test('holds each painted lane straight through an intersection in all four direc
       near(car.heading, heading, 0.025);
     }
   }
-  for (const pose of [{x: -3}, {x: 18, z: 25}, {heading: Math.PI / 4}, {speed: -2}]) {
+});
+
+test('acquires a forward lane from the opposing lane, centerline and shoulder in all four directions', () => {
+  for (const [heading, forwardX, forwardZ] of [
+    [0, 0, -1], [Math.PI / 2, 1, 0], [Math.PI, 0, 1], [-Math.PI / 2, -1, 0],
+  ]) {
+    const rightX = -forwardZ, rightZ = forwardX;
+    // Use an offset junction so lane selection also accounts for the street's position in the city.
+    for (const [offset, yaw, speed, center] of [
+      [-7.1, 0, 12, 2.55], [0, -0.25, 0, 2.55], [10.8, 0.05, 10, 7.11], [-2.55, 1.05, 8, 2.55],
+    ]) {
+      const x = 80 + offset * rightX - 35 * forwardX;
+      const z = -80 + offset * rightZ - 35 * forwardZ;
+      const game = driving({x, z, heading: heading + yaw, speed});
+      const car = game.car;
+      game.toggleCruise();
+      assert.equal(game.cruise.active, true, `heading ${heading}, lateral offset ${offset}`);
+      assert.deepEqual([car.x, car.z, car.heading], [x, z, heading + yaw]);
+      game.update(frame);
+      near(car.speed, speed, 0.55);
+      run(game, 9);
+      assert.equal(game.cruise.active, true);
+      assert.ok((car.x - x) * forwardX + (car.z - z) * forwardZ > 25);
+      near((car.x - 80) * rightX + (car.z + 80) * rightZ, center, 0.12);
+      near(Math.cos(car.heading - heading), 1, 0.0003);
+      near(game.speedKph, Math.max(20, Math.round(speed * 3.6)), 1);
+    }
+  }
+});
+
+test('acquires the forward cross street from an angled start in a junction', () => {
+  for (const [offset, center] of [[0, 2.55], [10.1, 7.11]]) {
+    const game = driving({x: 80, z: -80 + offset, heading: Math.PI / 3, speed: 12});
+    game.toggleCruise();
+    run(game, 7);
+    assert.equal(game.cruise.active, true);
+    assert.ok(game.car.x > 110);
+    near(game.car.z, -80 + center, 0.12);
+    near(Math.sin(game.car.heading), 1, 0.0003);
+  }
+});
+
+test('regains a forward lane from a fast sideways approach toward the curb', () => {
+  for (const [street, x, heading] of [[0, -9.8, -Math.PI / 2], [240, 252, Math.PI / 2]]) {
+    const game = driving({x, z: 35, heading, speed: 24});
+    const car = game.car;
+    game.toggleCruise();
+    run(game, 7);
+    assert.equal(game.cruise.active, true);
+    assert.equal(game.cruise.setSpeedKph, 86);
+    const north = Math.sign(Math.cos(car.heading));
+    const center = (car.x - street) * north;
+    assert.ok([2.55, 7.11].some(offset => Math.abs(center - offset) <= 0.12));
+    near(Math.sin(car.heading), 0, 0.025);
+    const z = car.z;
+    run(game, 0.5);
+    assert.ok((z - car.z) * north > 2, 'continued along the recovered lane');
+    near((car.x - street) * north, center, 0.12);
+  }
+});
+
+test('keeps cruise unavailable when reversing or deep inside a city block', () => {
+  for (const pose of [{x: 40, z: 40}, {speed: -2}]) {
     const game = driving(pose);
     game.toggleCruise();
     assert.equal(game.cruise.active, false);
@@ -209,6 +271,21 @@ test('steering mid-block keeps cruise active and centers the car again on releas
   near(game.car.x, 2.55, 0.1);
   near(game.car.heading, 0, 0.02);
   near(game.speedKph, 36, 1);
+});
+
+test('recovers into the new forward lane when a mid-block U-turn ends on the wrong side', () => {
+  const game = driving({x: 7.11, z: 120, speed: 5.5});
+  const car = game.car;
+  game.toggleCruise();
+  for (let i = 0; i < 4 * 60 && car.heading > -Math.PI; i++) game.update(frame, {x: -1});
+  assert.ok(car.x >= 0 && Math.cos(car.heading) < -0.99, 'finished facing south on the northbound side');
+
+  const releaseZ = car.z;
+  run(game, 8);
+  assert.equal(game.cruise.active, true);
+  assert.ok(car.z - releaseZ > 25);
+  near(car.x, -2.55, 0.12);
+  near(Math.cos(car.heading), -1, 0.0003);
 });
 
 test('held steering, a brief neutral pause and immediate countersteering match manual driving', () => {

@@ -1,5 +1,5 @@
-import {districtAt, isOpen, streetAt} from './city.js';
-import {acquireLane, cruiseSteering, laneEndDistance, laneOffsets} from './cruise-lane.js';
+import {carRadius, districtAt, isOpen, streetAt} from './city.js';
+import {occupiedLane, recoveryLane, cruiseSteering, recoverySpeedLimit, laneEndDistance, laneOffsets} from './cruise-lane.js';
 import {cruiseSpeed, pedalBraking} from './cruise-speed.js';
 
 const TAU = 2 * Math.PI;
@@ -27,6 +27,7 @@ const RACE_TIME = 75;
 const SEARCH_TIME = 5.5;
 const MAX_GAP_CARS = 3;
 const MIN_CRUISE_KPH = 20;
+const STEERING_RELEASE_DELAY = 0.25;
 const END_BRAKING = 3.5;
 const topSpeed = car => car.type === 'coupe' ? 34 : (car.type === 'taxi' ? 27 : 29);
 
@@ -186,7 +187,7 @@ export class Game {
     hero.owner = 'personal';
     this.cars = [hero, ...ambientCars()];
     this.cruise = {lane: null, maneuver: null, get active() { return this.lane !== null; },
-      get driverSteering() { return this.maneuver !== null && this.maneuver.releasedFor < 0.25; },
+      get driverSteering() { return this.maneuver !== null && this.maneuver.releasedFor < STEERING_RELEASE_DELAY; },
       setSpeedKph: 0, gapCars: 2, following: null, overriding: false, ending: false};
     this.peds = pedestrians();
     this.time = 0;
@@ -222,16 +223,19 @@ export class Game {
     }
     const car = this.car;
     if (!car) return;
-    const lane = acquireLane(car);
+    const stoppingDistance = 1 + car.speed ** 2 / (2 * END_BRAKING);
+    const occupied = occupiedLane(car);
+    const lane = occupied ?? recoveryLane(car, stoppingDistance);
     if (!lane) {
-      this.message('Cruise unavailable · Align with a forward lane', 2.5);
+      this.message(car.speed < 0 ? 'Cruise unavailable · Stop reversing' : 'Cruise unavailable · Move closer to a street', 2.5);
       return;
     }
-    if (laneEndDistance(car, lane) <= 1 + car.speed ** 2 / (2 * END_BRAKING)) {
+    if (laneEndDistance(car, lane) <= stoppingDistance) {
       this.message('Road ends ahead · Take the turn manually', 2.5);
       return;
     }
     this.cruise.lane = lane;
+    if (!occupied) this.cruise.maneuver = {entry: lane, crossing: null, releasedFor: STEERING_RELEASE_DELAY};
     this.cruise.setSpeedKph = clamp(this.speedKph, MIN_CRUISE_KPH, this.maxCruiseKph);
   }
 
@@ -447,8 +451,10 @@ export class Game {
     const result = cruiseSpeed(car, this.cars, cruise.lane, target, cruise.gapCars, dt);
     cruise.following = result.following;
     cruise.ending = !result.following && endSpeed < Math.min(cruise.setSpeedKph / 3.6, cornerSpeed);
-    const speed = Math.min(result.speed, Math.max(cornerSpeed, car.speed - pedalBraking * dt));
-    return {steer: correction, speed};
+    const curbLimit = cruise.maneuver && !cruise.driverSteering
+      ? recoverySpeedLimit(car, cruise.lane) : Infinity;
+    const speed = Math.min(result.speed, Math.max(cornerSpeed, car.speed - pedalBraking * dt), curbLimit);
+    return {steer: correction, speed, pivot: curbLimit < result.speed};
   }
 
   drive(car, dt, input) {
@@ -463,11 +469,12 @@ export class Game {
       const drag = (input.brake ? pedalBraking : acceleration ? 0.6 : 3.8) * dt;
       car.speed = Math.sign(car.speed) * Math.max(0, Math.abs(car.speed) - drag);
     }
-    const handling = (input.brake ? 2.2 : 1.55) * Math.min(1, Math.abs(car.speed) / 4);
-    car.heading += (assist?.steer ?? steer) * handling * Math.sign(car.speed) * dt;
+    // At the curb the centering assist can finish rotating even from a standstill.
+    const steeringRate = assist?.pivot ? 1 : clamp(car.speed / 4, -1, 1);
+    car.heading += (assist?.steer ?? steer) * (input.brake ? 2.2 : 1.55) * steeringRate * dt;
     const x = car.x + Math.sin(car.heading) * car.speed * dt;
     const z = car.z - Math.cos(car.heading) * car.speed * dt;
-    if (isOpen(x, z, 1.5)) { car.x = x; car.z = z; }
+    if (isOpen(x, z, carRadius)) { car.x = x; car.z = z; }
     else if (Math.abs(car.speed) > 1.6) {
       this.cancelCruise('Cruise off · Take the wheel');
       car.speed *= -0.22;
