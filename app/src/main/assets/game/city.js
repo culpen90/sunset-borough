@@ -1,5 +1,6 @@
 export const streets = [-240, -160, -80, 0, 80, 160, 240];
 export const worldLimit = 255;
+export const carRadius = 1.5;
 // Distances from the street center to the paint, in metres.
 export const laneMarkings = {yellow: 0.19, divider: 4.9, shoulder: 9.32};
 

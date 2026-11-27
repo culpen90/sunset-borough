@@ -1,4 +1,4 @@
-import {laneMarkings, streetAt, streets} from './city.js';
+import {carRadius, laneMarkings, streetAt, streets, worldLimit} from './city.js';
 
 // Centers between the double yellow, dashed divider and shoulder in streetscape.js.
 export const laneOffsets = [
@@ -12,6 +12,8 @@ const directions = [
   {heading: -Math.PI / 2, forwardX: -1, forwardZ: 0},
 ].map(direction => ({...direction, rightX: -direction.forwardZ, rightZ: direction.forwardX}));
 const outerStreet = streets[streets.length - 1];
+const roadHalfWidth = 10;
+const sidewalkReach = 15;
 // Stop with the front bumper behind the painted stop bar, 14.25 m before the junction center.
 const stoppingPosition = outerStreet - 14.25 - 2.7;
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -23,7 +25,12 @@ function directionAt(heading) {
   return directions[((index % 4) + 4) % 4];
 }
 
-export function acquireLane(car) {
+function laneOnStreet(direction, street, offset) {
+  const center = street + laneOffsets[offset < laneMarkings.divider ? 0 : 1];
+  return {...direction, center};
+}
+
+export function occupiedLane(car) {
   if (car.speed < 0) return null;
   const direction = directionAt(car.heading);
   if (Math.abs(angleDiff(direction.heading, car.heading)) > Math.PI / 8) return null;
@@ -31,9 +38,41 @@ export function acquireLane(car) {
   const street = streetAt(across);
   const offset = across - street;
   if (offset < laneMarkings.yellow || offset > laneMarkings.shoulder) return null;
-  if (Math.abs(forward(car, direction)) > outerStreet + 10) return null;
-  const center = street + laneOffsets[offset < laneMarkings.divider ? 0 : 1];
-  return {...direction, center};
+  if (Math.abs(forward(car, direction)) > outerStreet + roadHalfWidth) return null;
+  return laneOnStreet(direction, street, offset);
+}
+
+// Mid-block only the local street is available. Inside a junction the nose of
+// the car chooses the outgoing street. A broadside car joins the nearer lane.
+export function recoveryLane(car, stoppingDistance = 0) {
+  if (car.speed < 0) return null;
+  const candidates = [];
+  for (const direction of directions) {
+    const across = lateral(car, direction);
+    const street = streetAt(across);
+    const offset = across - street;
+    const yaw = Math.abs(angleDiff(direction.heading, car.heading));
+    if (Math.abs(offset) > sidewalkReach || yaw > Math.PI / 2 + 1e-8 ||
+        Math.abs(forward(car, direction)) > outerStreet + sidewalkReach) continue;
+    const lane = laneOnStreet(direction, street, offset);
+    candidates.push({lane, yaw, shift: Math.abs(lane.center - across),
+      ends: laneEndDistance(car, lane) <= stoppingDistance});
+  }
+  candidates.sort((a, b) => a.ends - b.ends ||
+    (Math.abs(a.yaw - b.yaw) > 1e-8 ? a.yaw - b.yaw : a.shift - b.shift));
+  return candidates[0]?.lane ?? null;
+}
+
+// Keep 0.8 seconds of turning room along the car's current heading.
+// A car almost parallel to the curb needs little lateral room to steer back.
+export function recoverySpeedLimit(car, lane) {
+  const sideways = Math.sin(car.heading - lane.heading);
+  const across = lateral(car, lane);
+  if (Math.abs(sideways) < 0.001 || (lane.center - across) * sideways >= 0) return Infinity;
+  const side = Math.sign(sideways);
+  const street = streetAt(lane.center);
+  const edge = Math.min(side * street + sidewalkReach, worldLimit - carRadius);
+  return Math.max(0, edge - side * across) / (Math.abs(sideways) * 0.8);
 }
 
 // Remember the crossing while the driver steers, even if a wide turn carries the car past it.
@@ -46,7 +85,7 @@ function trackTurn(car, maneuver, currentLane, steer) {
     maneuver.crossing = crossing;
   } else if (maneuver.crossing !== null) {
     // The driver can keep steering through more than one junction without releasing.
-    const occupied = acquireLane(car);
+    const occupied = occupiedLane(car);
     if (occupied && Math.abs(forward(car, occupied) - streetAt(forward(car, occupied))) > 20) {
       maneuver.entry = occupied;
       maneuver.crossing = null;
@@ -86,12 +125,12 @@ export function cruiseSteering(car, cruise, steer, steeringHeld, dt) {
       return steer;
     }
     if (wasSteering) {
-      // Honor the lane the driver actually reached, including a manual lane change.
-      const occupied = acquireLane(car);
-      const reversed = occupied && Math.cos(occupied.heading - maneuver.entry.heading) < -0.9;
-      if (occupied && (occupied.heading === cruise.lane.heading || reversed)) {
-        if (occupied.heading === maneuver.entry.heading || reversed) maneuver.entry = occupied;
-        cruise.lane = occupied;
+      // Honor a lane change or a mid-block U-turn that finishes across the yellow.
+      const destination = occupiedLane(car) ?? (maneuver.crossing === null ? recoveryLane(car) : null);
+      const reversed = destination && Math.cos(destination.heading - maneuver.entry.heading) < -0.9;
+      if (destination && (destination.heading === cruise.lane.heading || reversed)) {
+        if (destination.heading === maneuver.entry.heading || reversed) maneuver.entry = destination;
+        cruise.lane = destination;
       }
     }
   }
