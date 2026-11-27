@@ -50,7 +50,7 @@ function save() {
 }
 function clearInput() {
   keys.clear();held.clear();stick.x=0;stick.y=0;stick.pointer=null;lookPointer=null;
-  game.player.moving = game.player.running = false;
+  game.player.moving = game.player.running = game.player.backpedaling = false;
   el('stick').firstElementChild.style.transform = '';
   document.querySelectorAll('.pressed').forEach(btn => btn.classList.remove('pressed'));
 }
@@ -200,7 +200,8 @@ function frame(stamp) {
     steeringHeld: !!(right || left),
     y: Math.min(1, Math.max(-1, stick.y + down('ArrowUp','KeyW') - down('ArrowDown','KeyS','reverse') + (driving ? down('boost') : 0))),
     run: !!down('ShiftLeft','ShiftRight','boost'), brake: !!down('Space','brake'),
-    reverse: !!down('ArrowDown','KeyS','reverse')
+    reverse: !!down('ArrowDown','KeyS','reverse'),
+    cameraHeading: camera.heading
   };
   while (accumulator >= 1/60) { game.update(1/60, input); accumulator -= 1/60; }
   camera.update(game, Math.min(dt, .10), lookPointer !== null);
