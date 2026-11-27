@@ -159,6 +159,20 @@ test('gives the driver control at the end of the road', () => {
   assert.equal(game.cruise.active, false);
 });
 
+test('can turn onto the cross street while cruise slows for the last junction', () => {
+  const game = driving({z: -193, speed: 10});
+  game.toggleCruise();
+  for (let i = 0; i < 5 * 60 && game.car.z > -221.6; i++) game.update(frame);
+  assert.ok(game.cruise.active && game.cruise.ending);
+  run(game, 0.95, {x: 1});
+  run(game, 8);
+  assert.equal(game.cruise.active, true);
+  assert.ok(game.car.x > 30);
+  near(game.car.z, -240 + 2.55, 0.12);
+  near(game.car.heading, Math.PI / 2, 0.025);
+  near(game.speedKph, 36, 1);
+});
+
 test('keeps the selected bumper gap as stopped traffic starts moving again', () => {
   for (const gapCars of [1, 2, 3]) {
     const game = new Game();
@@ -184,15 +198,129 @@ test('keeps the selected bumper gap as stopped traffic starts moving again', () 
   }
 });
 
-test('brake, reverse, steering and cancel return control immediately', () => {
+test('steering mid-block keeps cruise active and centers the car again on release', () => {
+  const game = driving({z: 120, speed: 10});
+  game.toggleCruise();
+  run(game, 0.25, {x: 0.8});
+  assert.equal(game.cruise.active, true);
+  assert.ok(game.car.heading > 0.1);
+  run(game, 4);
+  assert.equal(game.cruise.active, true);
+  near(game.car.x, 2.55, 0.1);
+  near(game.car.heading, 0, 0.02);
+  near(game.speedKph, 36, 1);
+});
+
+test('held steering, a brief neutral pause and immediate countersteering match manual driving', () => {
+  const pose = {z: 89, speed: 12};
+  const game = driving(pose);
+  const manual = driving(pose);
+  game.toggleCruise();
+
+  // A short release between steering inputs must preserve the driver's heading.
+  for (const [x, frames] of [[1, 40], [0, 12], [1, 34], [-0.65, 12]]) {
+    for (let i = 0; i < frames; i++) {
+      game.update(frame, {x});
+      manual.update(frame, {x});
+      assert.equal(game.cruise.active, true);
+      near(game.car.heading, manual.car.heading, 1e-8);
+    }
+  }
+  assert.ok(game.car.heading > Math.PI / 2, 'the driver could steer past the cross street');
+});
+
+test('holding both steering buttons preserves heading until both are released', () => {
+  const game = driving({z: 7, speed: 10});
+  game.toggleCruise();
+  run(game, 0.55, {x: 1});
+  const heading = game.car.heading;
+  for (let i = 0; i < 36; i++) {
+    game.update(frame, {x: 0, steeringHeld: true});
+    near(game.car.heading, heading, 1e-8);
+    assert.equal(game.cruise.active, true);
+  }
+  run(game, 8);
+  near(game.car.heading, Math.PI / 2, 0.025);
+  near(game.car.z, 2.55, 0.12);
+});
+
+test('remembers the eastbound turn after a driver overshoots past 180 degrees', () => {
+  const game = driving({x: 2.545, z: 7, speed: 10});
+  game.toggleCruise();
+  run(game, 2.5, {x: 1});
+  assert.ok(game.car.heading > Math.PI);
+  run(game, 8);
+  assert.equal(game.cruise.active, true);
+  assert.ok(game.car.x > 30);
+  near(Math.sin(game.car.heading), 1, 0.001);
+  near(Math.cos(game.car.heading), 0, 0.025);
+  near(game.car.z, 2.55, 0.12);
+});
+
+test('reapplying steering takes the wheel back on the first frame of input during recovery', () => {
+  const game = driving({z: 89, speed: 10});
+  game.toggleCruise();
+  run(game, 0.6, {x: 1});
+  const releasedHeading = game.car.heading;
+  run(game, 0.2);
+  near(game.car.heading, releasedHeading, 1e-8);
+  run(game, 0.2);
+  assert.ok(game.car.heading > releasedHeading + 0.02, 'lane recovery has started turning right');
+
+  const {x, z, heading, speed} = game.car;
+  const manual = driving({x, z, heading, speed});
+  for (let i = 0; i < 8; i++) {
+    manual.update(frame, {x: -0.7});
+    game.update(frame, {x: -0.7});
+    near(game.car.heading, manual.car.heading, 1e-8);
+    assert.equal(game.cruise.active, true);
+  }
+  const correctedHeading = game.car.heading;
+  run(game, 0.2);
+  near(game.car.heading, correctedHeading, 1e-8);
+  run(game, 5);
+  near(Math.cos(game.car.heading), 0, 0.025);
+  assert.ok(game.car.x > 25, 'the car resumed the right turn after the final release');
+});
+
+test('finishes understeered and oversteered turns in a forward lane and follows traffic there', () => {
+  const junctionZ = 80;
+  for (const side of [-1, 1]) {
+    // At 10 m/s full steering turns the car about 53 or 115 degrees before release.
+    for (const steerSeconds of [0.6, 1.3]) {
+      const game = driving({x: 2.55, z: junctionZ + (side < 0 ? 4 : 9), speed: 10});
+      game.toggleCruise();
+      run(game, steerSeconds, {x: side});
+      assert.equal(game.cruise.active, true);
+      run(game, 5);
+      const car = game.car;
+      assert.equal(game.cruise.active, true);
+      assert.ok(car.x * side > 25, 'drove out along the selected cross street');
+      near(Math.sin(car.heading), side, 0.001);
+      near(Math.cos(car.heading), 0, 0.025);
+      const offset = (car.z - junctionZ) * side;
+      assert.ok([2.55, 7.11].some(center => Math.abs(offset - center) <= 0.12),
+        `Expected a forward lane center after the turn, got signed offset ${offset}`);
+      near(game.speedKph, 36, 1);
+
+      const lead = {...car, id: 'destination-lead', x: car.x + side * 40, speed: 0, owner: 'parked'};
+      game.cars.push(lead);
+      run(game, 18);
+      assert.equal(game.cruise.following, lead.id);
+      assert.equal(car.speed, 0);
+      near((lead.x - car.x) * side, 15, 0.5);
+    }
+  }
+});
+
+test('brake, reverse and cancel return control immediately', () => {
   // Gas and reverse pressed together produce zero net throttle plus the reverse-button signal.
-  for (const input of [{brake: true}, {y: -1}, {y: 0, reverse: true}, {x: 0.8}]) {
+  for (const input of [{brake: true}, {y: -1}, {y: 0, reverse: true}]) {
     const game = driving({speed: 10});
     game.toggleCruise();
     game.update(frame, input);
     assert.equal(game.cruise.active, false);
-    if (input.x) assert.ok(game.car.heading > 0);
-    else assert.ok(game.car.speed < 10);
+    assert.ok(game.car.speed < 10);
     run(game, 1);
     assert.equal(game.cruise.active, false);
   }

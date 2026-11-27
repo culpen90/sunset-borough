@@ -1,6 +1,6 @@
 import {districtAt, isOpen, streetAt} from './city.js';
-import {acquireLane, laneEndDistance, laneOffsets, laneSteering} from './cruise-lane.js';
-import {cruiseSpeed} from './cruise-speed.js';
+import {acquireLane, cruiseSteering, laneEndDistance, laneOffsets} from './cruise-lane.js';
+import {cruiseSpeed, pedalBraking} from './cruise-speed.js';
 
 const TAU = 2 * Math.PI;
 const clamp = (n, low, high) => Math.min(high, Math.max(low, n));
@@ -185,7 +185,8 @@ export class Game {
     const hero = createCar(COUPE, 'coupe', 0x0dafa6, 5, 0, 0);
     hero.owner = 'personal';
     this.cars = [hero, ...ambientCars()];
-    this.cruise = {lane: null, get active() { return this.lane !== null; },
+    this.cruise = {lane: null, maneuver: null, get active() { return this.lane !== null; },
+      get driverSteering() { return this.maneuver !== null && this.maneuver.releasedFor < 0.25; },
       setSpeedKph: 0, gapCars: 2, following: null, overriding: false, ending: false};
     this.peds = pedestrians();
     this.time = 0;
@@ -236,7 +237,7 @@ export class Game {
 
   cancelCruise(reason) {
     if (!this.cruise.active) return;
-    Object.assign(this.cruise, {lane: null, following: null, overriding: false, ending: false});
+    Object.assign(this.cruise, {lane: null, maneuver: null, following: null, overriding: false, ending: false});
     if (reason) this.message(reason, 2.5);
   }
 
@@ -402,15 +403,11 @@ export class Game {
 
   cruiseControls(car, dt, input, steer, throttle) {
     const cruise = this.cruise;
-    if (input.brake || input.reverse || throttle < -0.04 || Math.abs(steer) > 0.08) {
+    if (input.brake || input.reverse || throttle < -0.04 || car.speed < 0) {
       this.cancelCruise();
       return null;
     }
-    const correction = laneSteering(car, cruise.lane);
-    if (correction === null || car.speed < 0) {
-      this.cancelCruise('Lane lost · Take the wheel');
-      return null;
-    }
+    const correction = cruiseSteering(car, cruise, steer, input.steeringHeld || steer !== 0, dt);
     const remaining = laneEndDistance(car, cruise.lane);
     const endSpeed = Math.sqrt(2 * END_BRAKING * Math.max(0, remaining));
     cruise.overriding = throttle >= 0.04;
@@ -427,11 +424,19 @@ export class Game {
       this.cancelCruise('Road ends here · Steer to turn');
       return {steer: correction, speed: 0};
     }
-    const target = Math.min(cruise.setSpeedKph, endSpeed * 3.6);
+    let cornerSpeed = Infinity;
+    if (cruise.maneuver) {
+      const yaw = Math.abs(angleDiff(car.heading, cruise.maneuver.entry.heading));
+      // Slow a tight turn enough to leave room to straighten out after the driver lets go.
+      if (yaw > Math.PI * 5 / 8) cornerSpeed = 4;
+      else if (yaw > Math.PI / 12 || (cruise.maneuver.crossing !== null && Math.abs(steer) > 0.25)) cornerSpeed = 10;
+    }
+    const target = Math.min(cruise.setSpeedKph, endSpeed * 3.6, cornerSpeed * 3.6);
     const result = cruiseSpeed(car, this.cars, cruise.lane, target, cruise.gapCars, dt);
     cruise.following = result.following;
-    cruise.ending = !result.following && target < cruise.setSpeedKph;
-    return {steer: correction, speed: result.speed};
+    cruise.ending = !result.following && endSpeed < Math.min(cruise.setSpeedKph / 3.6, cornerSpeed);
+    const speed = Math.min(result.speed, Math.max(cornerSpeed, car.speed - pedalBraking * dt));
+    return {steer: correction, speed};
   }
 
   drive(car, dt, input) {
@@ -443,7 +448,7 @@ export class Game {
       let acceleration = throttle * (throttle * car.speed < 0 ? 27 : 12.5);
       if (Math.abs(throttle) < 0.04) acceleration = 0;
       car.speed = clamp(car.speed + acceleration * dt, -9, topSpeed(car));
-      const drag = (input.brake ? 31 : acceleration ? 0.6 : 3.8) * dt;
+      const drag = (input.brake ? pedalBraking : acceleration ? 0.6 : 3.8) * dt;
       car.speed = Math.sign(car.speed) * Math.max(0, Math.abs(car.speed) - drag);
     }
     const handling = (input.brake ? 2.2 : 1.55) * Math.min(1, Math.abs(car.speed) / 4);
