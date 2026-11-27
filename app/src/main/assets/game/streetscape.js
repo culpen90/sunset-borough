@@ -1,6 +1,7 @@
 import * as THREE from './vendor/three.module.js';
 import {buildings, laneMarkings, streets} from './city.js';
 import {Geometry, canvasTexture, randomFrom} from './geometry.js';
+import {signalAt, signalHeads, stopLineOffset} from './traffic-lights.js';
 
 const palettes=[
   ['#efb4a2','#4d7888','#c58578','#edd3be'], ['#b3cdc3','#426978','#709d99','#f3dec0'],
@@ -236,17 +237,47 @@ function buildingScenery(b,index,chunk) {
   }
 }
 
-function trafficLight(g,x,z) {
-  const metal='#5c6968',paint='#d9a65f';
-  g.box(x,2.91,z,.20,5.5,.20,metal);
-  g.box(x,.51,z,.41,.72,.41,'#9a9686');
-  g.box(x+.52,5.56,z,1.23,.15,.16,metal);
-  g.box(x+1.01,5.22,z,.53,1.3,.39,paint);
-  g.box(x+1.01,5.22,z+.209,.42,1.16,.04,'#303c44');
-  for(let i=0;i<3;i++) {
-    g.box(x+1.01,5.59-i*.36,z+.25,.24,.22,.05,['#824d4c','#8f7955','#9ae6aa'][i]);
-    g.box(x+1.01,5.73-i*.36,z+.28,.32,.055,.16,'#425152');
-  }
+function buildTrafficLights(scene,chunkAt) {
+  const lenses = new THREE.InstancedMesh(new THREE.CircleGeometry(.29, 16),
+    new THREE.MeshBasicMaterial({color:0xffffff}), signalHeads.length * 3);
+  const lensPose = new THREE.Object3D();
+  const aspects = ['stop','yield','go'];
+  const lit = ['#ff453f','#ffcc32','#38ff8e'].map(color => new THREE.Color(color));
+  const dark = ['#4a292a','#493d28','#23473b'].map(color => new THREE.Color(color));
+  signalHeads.forEach(({x,z,yaw}, headIndex) => {
+    const g = chunkAt(x,z).solid, cs = Math.cos(yaw), sn = Math.sin(yaw);
+    const box = (across,y,depth,w,h,d,color) =>
+      g.box(x + cs*across + sn*depth,y,z - sn*across + cs*depth,w,h,d,color,yaw);
+    box(6,.49,0,.46,.70,.46,'#939387');
+    box(6,3.65,0,.23,6.8,.23,'#586565');
+    box(2.86,6.93,0,6.47,.17,.18,'#586565');
+    box(0,5.88,0,.87,2.10,.49,'#cfa05a');
+    box(0,5.88,.25,.77,1.99,.07,'#28323a');
+    for (let i=0; i<3; i++) {
+      const y = 6.52 - i*.64;
+      box(0,y+.30,.40,.68,.07,.32,'#414e50');
+      lensPose.position.set(x + sn*.29,y,z + cs*.29);
+      lensPose.rotation.y = yaw;
+      lensPose.updateMatrix();
+      lenses.setMatrixAt(headIndex*3+i,lensPose.matrix);
+    }
+  });
+  lenses.computeBoundingSphere();
+  scene.add(lenses);
+  const lastAspect = [];
+  return time => {
+    let changed = false;
+    signalHeads.forEach(({junction,axis}, index) => {
+      const aspect = signalAt(junction.x,junction.z,axis,time);
+      if (lastAspect[index] === aspect) return;
+      lastAspect[index] = aspect;
+      for (let i=0; i<3; i++) {
+        lenses.setColorAt(index*3+i,aspects[i] === aspect ? lit[i] : dark[i]);
+      }
+      changed = true;
+    });
+    if (changed) lenses.instanceColor.needsUpdate = true;
+  };
 }
 
 // Bake the fixed sunset into one small ground shadow texture shared by curbs, asphalt and paint.
@@ -315,7 +346,7 @@ function roadFurniture(scene,chunkAt,chunks) {
           const off=n*1.56;
           stripe(mid+s*28.1,off,2.55,.61,'#e2d4bb');
         }
-        stripe(mid+s*25.75,s*4.75,.29,8.6,'#e2d4bb');
+        stripe(mid+s*(40-stopLineOffset),(axis ? -s : s)*4.75,.29,8.6,'#e2d4bb');
         const [tx,tz]=xy(mid+(s>0?9:-8),s*12.2);
         chunkAt(tx,tz).trees.push([tx,tz,(i+streetIndex+axis)*.74+s,.78+((i*9+axis*3+streetIndex)%5)*.10]);
         if((i+streetIndex+axis)%2===0 || cross===0) {
@@ -332,11 +363,6 @@ function roadFurniture(scene,chunkAt,chunks) {
         }
       }
     }
-  }
-  for(const x of streets) for(const z of streets) {
-    if(Math.abs(x)===240 || Math.abs(z)===240 || (x/80+z/80)%2!==0) continue;
-    trafficLight(chunkAt(x,z).solid,x-10.8,z-10.8);
-    trafficLight(chunkAt(x,z).solid,x+10.8,z+10.8);
   }
   const shadow=streetShadowMap(chunks);
   scene.add(road.mesh(receiveStreetShadows(groundTile(true),shadow)),
@@ -383,6 +409,7 @@ export function buildStreets(scene) {
     return chunks.get(key);
   };
   roadFurniture(scene,chunkAt,chunks);
+  const updateLights = buildTrafficLights(scene,chunkAt);
   buildings.forEach((b,i)=>buildingScenery(b,i,chunkAt(b.x,b.z)));
   const dummy=new THREE.Object3D();
   const palmMaterial=litMaterial.clone();palmMaterial.side=THREE.DoubleSide;
@@ -402,4 +429,5 @@ export function buildStreets(scene) {
     }
   }
   horizon(scene);
+  return updateLights;
 }

@@ -137,7 +137,7 @@ window.addEventListener('resize', () => { if(panel==='map')drawMap(el('atlas'),g
 document.addEventListener('contextmenu', e => e.preventDefault());
 
 function refreshCruiseHUD() {
-  const { active, driverSteering, maneuver, following, overriding, ending, setSpeedKph, gapCars } = game.cruise;
+  const { active, driverSteering, maneuver, following, atSignal, overriding, ending, setSpeedKph, gapCars } = game.cruise;
   el('cruiseToggle').setAttribute('aria-pressed', String(active));
   el('cruiseTarget').hidden = el('cruiseSlower').hidden = el('cruiseFaster').hidden = !active;
   setText('cruiseDistance', gapCars === 1 ? '1 car' : gapCars + ' cars');
@@ -149,7 +149,7 @@ function refreshCruiseHUD() {
     return;
   }
   const mode = driverSteering ? 'You steer' : overriding ? 'Gas override' : ending ? 'Road end'
-    : following ? 'Following' : maneuver ? 'Centering' : 'Cruising';
+    : atSignal ? 'Traffic light' : following ? 'Following' : maneuver ? 'Centering' : 'Cruising';
   setText('cruiseMode', mode);
   setText('cruiseTarget', 'Set ' + setSpeedKph + ' km/h');
   el('cruiseSlower').disabled = setSpeedKph <= 20;
