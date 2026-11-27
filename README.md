@@ -14,7 +14,9 @@ adb install -r Sunset-Borough-1.1.0.apk
 
 In landscape, drag the left stick to walk and swipe the street view to look around. Use **Enter car** beside the coupe. Hold **Gas** with your right thumb and steer with your left. Use **Brake** to slow down and **Reverse** to back up. The gold marker and radar route lead to your next objective. Tap the radar for the full city map.
 
-Line up in a lane and tap **Set cruise** to hold your speed and keep the car between the lines. Use **− / +** to change the set speed by 5 km/h. Tap **Gap** to leave **1, 2, or 3 car lengths** between your front bumper and the car ahead. The default is 2. Cruise slows or stops behind traffic and returns to your set speed when the lane clears. Steering, braking, or reversing gives you control immediately. Hold **Gas** for a temporary speed override. You choose all turns.
+Line up in a lane and tap **Set cruise** to hold your speed and keep the car between the lines. Steer through junctions as usual. The HUD shows **You steer** while you have the wheel. After you release steering for a quarter second, cruise straightens out an early or wide turn and centers the car in the outgoing lane. Steer again at any time to correct it yourself.
+
+Use **− / +** to change the set speed by 5 km/h. Tap **Gap** to leave **1, 2, or 3 car lengths** between your front bumper and the car ahead. The default is 2. Cruise slows for turns and traffic and resumes your set speed when the lane clears. Hold **Gas** for a temporary speed override. Brake, reverse, or tap cruise again to cancel.
 
 Taking an occupied car, hitting traffic at speed, or striking a pedestrian attracts patrols. Break contact to lose your wanted stars. If the patrols catch you, you return to Lido with a fine. Progress saves on mission changes, during play and when paused. **Continue** restores your job, money, vehicle and position on this device.
 

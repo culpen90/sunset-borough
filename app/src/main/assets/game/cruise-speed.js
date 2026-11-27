@@ -3,7 +3,7 @@
 const carLength = 5;
 const maxAcceleration = 3.2;
 const comfortBraking = 4.5;
-const pedalBraking = 31;
+export const pedalBraking = 31;
 
 export function cruiseSpeed(car, cars, lane, setSpeedKph, gapCars, dt) {
   let lead = null;

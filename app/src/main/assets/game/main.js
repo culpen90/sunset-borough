@@ -134,7 +134,7 @@ window.addEventListener('resize', () => { if(panel==='map')drawMap(el('atlas'),g
 document.addEventListener('contextmenu', e => e.preventDefault());
 
 function refreshCruiseHUD() {
-  const { active, following, overriding, ending, setSpeedKph, gapCars } = game.cruise;
+  const { active, driverSteering, maneuver, following, overriding, ending, setSpeedKph, gapCars } = game.cruise;
   el('cruiseToggle').setAttribute('aria-pressed', String(active));
   el('cruiseTarget').hidden = el('cruiseSlower').hidden = el('cruiseFaster').hidden = !active;
   setText('cruiseDistance', gapCars === 1 ? '1 car' : gapCars + ' cars');
@@ -145,7 +145,8 @@ function refreshCruiseHUD() {
     setText('cruiseTarget', '');
     return;
   }
-  const mode = overriding ? 'Gas override' : ending ? 'Road end' : following ? 'Following' : 'Cruising';
+  const mode = driverSteering ? 'You steer' : overriding ? 'Gas override' : ending ? 'Road end'
+    : following ? 'Following' : maneuver ? 'Centering' : 'Cruising';
   setText('cruiseMode', mode);
   setText('cruiseTarget', 'Set ' + setSpeedKph + ' km/h');
   el('cruiseSlower').disabled = setSpeedKph <= 20;
@@ -190,8 +191,10 @@ function frame(stamp) {
   previousFrame = stamp;accumulator += dt;
   const driving = game.player.carId != null;
   const down = (...codes) => codes.some(code => keys.has(code) || held.has(code)) ? 1 : 0;
+  const left = down('ArrowLeft','KeyA','left'), right = down('ArrowRight','KeyD','right');
   const input = {
-    x: Math.min(1, Math.max(-1, stick.x + down('ArrowRight','KeyD','right') - down('ArrowLeft','KeyA','left'))),
+    x: Math.min(1, Math.max(-1, stick.x + right - left)),
+    steeringHeld: !!(right || left),
     y: Math.min(1, Math.max(-1, stick.y + down('ArrowUp','KeyW') - down('ArrowDown','KeyS','reverse') + (driving ? down('boost') : 0))),
     run: !!down('ShiftLeft','ShiftRight','boost'), brake: !!down('Space','brake'),
     reverse: !!down('ArrowDown','KeyS','reverse'),
