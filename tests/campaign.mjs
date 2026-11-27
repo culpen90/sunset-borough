@@ -1,0 +1,83 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {Game} from '../app/src/main/assets/game/game.js';
+
+const frame = 1 / 60;
+
+function run(game, seconds, input = {}) {
+  for (let n = 0; n < seconds * 60; n++) game.update(frame, input);
+}
+
+// Exercise the same input as the touch controls, including the time spent braking and cornering.
+function driveTo(game, x, z) {
+  for (let n = 0; n < 60 * 60; n++) {
+    const car = game.car;
+    assert.ok(car, 'Driver must still be in the vehicle');
+    const distance = Math.hypot(x - car.x, z - car.z);
+    if (distance < 3.7) return;
+    const bearing = Math.atan2(x - car.x, car.z - z);
+    const difference = bearing - car.heading;
+    const turn = Math.atan2(Math.sin(difference), Math.cos(difference));
+    const speed = Math.max(3.5, Math.min(26, distance * 0.72, 26 / (1 + Math.abs(turn) * 4)));
+    game.update(frame, {
+      x: Math.max(-1, Math.min(1, turn * 3)),
+      y: speed > car.speed ? 1 : 0,
+      brake: car.speed > speed + 1.25,
+    });
+  }
+  assert.fail('Failed to reach (' + x + ', ' + z + ') during ' + game.objective);
+}
+
+function resume(game) {
+  const data = JSON.parse(JSON.stringify(game.serialize()));
+  const restored = new Game(data);
+  assert.deepEqual(restored.serialize(), data);
+  return restored;
+}
+
+test('complete every job through the controls, save mid-race and mid-pursuit, then replay', () => {
+  let game = new Game();
+  assert.equal(game.actionLabel, 'Enter car');
+  game.interact();
+  assert.equal(game.player.carId, 'comet');
+  driveTo(game, 5, -73);
+  assert.equal(game.target.label, 'Marina club');
+  driveTo(game, 5, -80);
+  driveTo(game, 161, -80);
+  assert.equal(game.cash, 450);
+
+  driveTo(game, 165, -145);
+  assert.ok(game.remainingTime > 0);
+  game = resume(game);
+  driveTo(game, 165, -160);
+  driveTo(game, 4, -160);
+  driveTo(game, -156, -160);
+  driveTo(game, -156, -80);
+  driveTo(game, -155, 80);
+  assert.equal(game.cash, 1230);
+  assert.equal(game.missionTitle, 'Hot Property');
+
+  driveTo(game, -155, 151);
+  run(game, 2, {brake: true});
+  game.interact();
+  assert.equal(game.player.carId, null);
+  run(game, 1, {x: 0.45, y: -0.93});
+  game.interact();
+  assert.equal(game.player.carId, 'gullwing');
+  assert.equal(game.wanted, 2);
+  game = resume(game);
+  driveTo(game, 165, 160);
+  if (game.wanted) {
+    driveTo(game, 165, 238);
+    driveTo(game, -155, 238);
+    driveTo(game, 165, 238);
+    driveTo(game, 165, 160);
+  }
+  assert.equal(game.wanted, 0);
+  assert.equal(game.missionTitle, 'Free roam');
+  assert.equal(game.completed, 3);
+  assert.equal(game.cash, 2430);
+  game.replayJobs();
+  assert.equal(game.missionTitle, 'Night Dispatch');
+  assert.equal(game.cash, 2430);
+});

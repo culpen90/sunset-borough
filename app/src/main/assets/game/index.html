@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#211922">
+  <title>Sunset Borough</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <svg id="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="arrow" viewBox="0 0 24 24"><path d="M4 12h15m-6-7 7 7-7 7"/></symbol>
+    <symbol id="pad" viewBox="0 0 24 24"><path d="M7 6h10c3 0 4 3 5 10 .5 3-2 4-4 2l-3-3H9l-3 3c-2 2-4.5 1-4-2C3 9 4 6 7 6ZM6 10v4m-2-2h4m7 0h.1m3-2h.1"/></symbol>
+    <symbol id="sound" viewBox="0 0 24 24"><path d="M3 9h4l5-4v14l-5-4H3zM16 8c3 2 3 6 0 8m3-11c5 4 5 10 0 14"/></symbol>
+    <symbol id="muted" viewBox="0 0 24 24"><path d="M3 9h4l5-4v14l-5-4H3zM16 9l5 6m0-6-5 6"/></symbol>
+    <symbol id="pauseIcon" viewBox="0 0 24 24"><path d="M8 5v14m8-14v14" style="stroke-width:4"/></symbol>
+    <symbol id="enterIcon" viewBox="0 0 24 24"><path d="m5 11 2-5h10l2 5 2 2v5H3v-5zM5 11h14M6 15h2m8 0h2M5 18v2m14-2v2"/></symbol>
+    <symbol id="exitIcon" viewBox="0 0 24 24"><path d="M10 20H4V4h6m-2 8h13m-6-6 6 6-6 6"/></symbol>
+    <symbol id="runIcon" viewBox="0 0 24 24"><circle cx="15" cy="4" r="2"/><path d="m5 11 4-4 4 1 3 4 4 1M12 9l-3 6 5 2-2 5M9 15l-3 4H2"/></symbol>
+    <symbol id="fist" viewBox="0 0 24 24"><path d="M5 12V8q0-3 3-2 1-4 4-2 3-2 5 1 3-1 3 2v6l-3 4v3H8v-3l-4-5q-2-3 1-4m3-2v4m4-6v5m5-4v4"/></symbol>
+    <symbol id="pedal" viewBox="0 0 24 24"><path d="m9 3 8 2-4 15-8-2zM11 7l3 1m-4 3 3 1m-4 3 3 1"/></symbol>
+    <symbol id="reverseIcon" viewBox="0 0 24 24"><path d="M5 8h8a6 6 0 0 1 0 12h-2M9 3 4 8l5 5"/></symbol>
+    <symbol id="chevron" viewBox="0 0 24 24"><path d="m9 4 8 8-8 8"/></symbol>
+    <symbol id="pin" viewBox="0 0 24 24"><path d="M12 21s7-7 7-13a7 7 0 1 0-14 0c0 6 7 13 7 13Z"/><circle cx="12" cy="8" r="2"/></symbol>
+    <symbol id="brakeIcon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M3 5a11 11 0 0 0 0 14M21 5a11 11 0 0 1 0 14M12 8v5m0 3h.1"/></symbol>
+  </svg>
+  <canvas id="scene" aria-label="Game world"></canvas>
+  <main id="titleScreen" class="cover">
+    <div class="titleBlock">
+      <h1><span>SUNSET</span><span>BOROUGH</span></h1>
+      <div class="titleActions">
+        <button id="play" class="primary">Start game <svg><use href="#arrow"/></svg></button>
+        <button id="titleHelp" class="sub"><svg><use href="#pad"/></svg> How to play</button>
+      </div>
+    </div>
+    <button id="titleSound" class="soundButton glass" aria-label="Toggle sound"><svg><use href="#sound"/></svg></button>
+    <p id="loadError" hidden>Game files could not be loaded. Reopen the game to retry.</p>
+  </main>
+  <section id="hud" aria-label="Game controls" hidden>
+    <div id="lookZone"></div>
+    <div class="topLeft">
+      <button id="radarButton" aria-label="Open city map"><canvas id="radar"></canvas><span>N</span></button>
+      <div class="job"><div id="jobName" class="kicker"></div><div id="goal"></div><div id="range"></div></div>
+    </div>
+    <div class="topRight">
+      <div class="stats"><div id="wallet"></div><div id="heat" aria-label="Wanted level"></div></div>
+      <button id="pauseButton" class="glass bigIcon" aria-label="Pause game"><svg><use href="#pauseIcon"/></svg></button>
+    </div>
+    <div id="notice" role="status" hidden></div>
+    <div id="capture" hidden>Getting busted <progress max="1"></progress></div>
+    <div id="stick" class="glass" aria-label="Movement joystick"><i></i></div>
+    <div id="steer" hidden><button id="left" class="glass" aria-label="Steer left"><svg><use href="#chevron"/></svg></button><button id="right" class="glass" aria-label="Steer right"><svg><use href="#chevron"/></svg></button></div>
+    <div class="lowerMiddle"><strong id="speed" hidden></strong><span id="district"></span></div>
+    <div class="actions">
+      <button id="action" class="glass touch"><svg><use href="#enterIcon"/></svg><span>Enter car</span></button>
+      <div class="actionRow">
+        <button id="strike" class="glass touch" aria-label="Strike"><svg><use href="#fist"/></svg><span>Strike</span></button>
+        <button id="reverse" class="glass touch" hidden><svg><use href="#reverseIcon"/></svg><span>Reverse</span></button>
+        <button id="boost" class="glass touch feature"><svg><use href="#runIcon"/></svg><span>Sprint</span></button>
+      </div>
+      <button id="brake" class="glass touch" hidden><svg><use href="#brakeIcon"/></svg><span>Brake</span></button>
+    </div>
+  </section>
+  <section id="overlay" class="cover overlay" hidden>
+    <article id="pausePanel" hidden>
+      <span class="kicker" id="pauseDistrict"></span>
+      <h2>Paused</h2>
+      <div class="menuStack">
+        <button id="resume" class="primary">Resume <svg><use href="#arrow"/></svg></button>
+        <button id="mapOpen">City map</button><button id="helpOpen">How to play</button>
+        <button id="replay" hidden>Replay story jobs</button>
+        <button id="toTitle">Save &amp; quit to title</button>
+      </div>
+      <button id="pauseSound" class="sub"><svg><use href="#sound"/></svg><span>Sound on</span></button>
+    </article>
+    <article id="helpPanel" class="wide" hidden>
+      <div class="panelHeader"><h2>How to play</h2><button class="back glass">Back</button></div>
+      <div class="helpColumns"><div><h3>On foot</h3><p>Drag the left stick to walk. Hold <b>Sprint</b> to run. Swipe the city view to look around.</p><p>Stand near a car and tap <b>Enter</b> or <b>Take car</b>. Tap <b>Strike</b> to throw a punch.</p></div><div><h3>At the wheel</h3><p>Hold <b>Gas</b> and use the arrows to steer. Use <b>Brake</b> for tight turns or <b>Reverse</b> to back up.</p><p>Follow the gold marker for jobs. Tap the radar for a street map. Lose pursuing patrols to clear your stars.</p></div></div>
+      <p class="keyLegend">Keyboard · WASD / arrows to move · E enter / exit · Shift sprint · Space brake · F strike · M map · Esc pause</p>
+    </article>
+    <article id="mapPanel" class="wide" hidden>
+      <div class="panelHeader"><div><div class="kicker" id="mapDistrict"></div><h2>City map</h2></div><button class="back glass">Back</button></div>
+      <div id="atlasBox"><canvas id="atlas"></canvas></div>
+      <div class="mapLegend"><span><i></i>You</span><span><i></i>Objective</span><b id="mapGoal"></b></div>
+    </article>
+  </section>
+  <script>
+    function showLoadError() {
+      var message = document.getElementById('loadError');
+      message.textContent = 'Update Android System WebView, then reopen the game.';
+      message.hidden = false;
+    }
+  </script>
+  <script type="module" src="./main.js" onerror="showLoadError()"></script>
+  <script nomodule>showLoadError();</script>
+</body>
+</html>

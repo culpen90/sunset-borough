@@ -1,0 +1,41 @@
+plugins {
+    id 'com.android.application'
+}
+
+def signingDirectory = new File(System.getProperty('user.home'), '.android/sunset-borough')
+def releaseKey = new File(signingDirectory, 'release.p12')
+def passwordFile = new File(signingDirectory, 'release.password')
+if (releaseKey.exists() != passwordFile.exists()) {
+    throw new GradleException('Sunset Borough release signing requires both release.p12 and release.password.')
+}
+
+android {
+    namespace = 'com.sunsetborough.game'
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = 'com.sunsetborough.game'
+        minSdk = 26
+        targetSdk = 36
+        versionCode = 1
+        versionName = '1.0.0'
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    if (releaseKey.isFile() && passwordFile.isFile()) {
+        signingConfigs {
+            release {
+                storeFile = releaseKey
+                storeType = 'PKCS12'
+                storePassword = passwordFile.getText('UTF-8').trim()
+                keyAlias = 'sunset-borough'
+                keyPassword = storePassword
+            }
+        }
+        buildTypes.release.signingConfig = signingConfigs.release
+    }
+}

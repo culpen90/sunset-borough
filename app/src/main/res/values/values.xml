@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Sunset Borough</string>
+    <string name="renderer_error">The game display closed. Reopen the city to return to your last save.</string>
+    <string name="reopen">Reopen city</string>
+    <color name="asphalt">#191728</color>
+    <style name="GameTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/asphalt</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#FFBC76</item>
+    </style>
+</resources>
