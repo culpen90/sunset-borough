@@ -1,5 +1,7 @@
 export const streets = [-240, -160, -80, 0, 80, 160, 240];
 export const worldLimit = 255;
+// Distances from the street center to the paint, in metres.
+export const laneMarkings = {yellow: 0.19, divider: 4.9, shoulder: 9.32};
 
 export function districtAt(x, z) {
   if (x >= 120) return 'Marina Keys';

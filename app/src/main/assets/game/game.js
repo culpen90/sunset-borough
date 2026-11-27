@@ -1,4 +1,6 @@
 import {districtAt, isOpen, streetAt} from './city.js';
+import {acquireLane, laneEndDistance, laneOffsets, laneSteering} from './cruise-lane.js';
+import {cruiseSpeed} from './cruise-speed.js';
 
 const TAU = 2 * Math.PI;
 const clamp = (n, low, high) => Math.min(high, Math.max(low, n));
@@ -23,6 +25,10 @@ const COUPE = 'comet';
 const HOT_CAR = 'gullwing';
 const RACE_TIME = 75;
 const SEARCH_TIME = 5.5;
+const MAX_GAP_CARS = 3;
+const MIN_CRUISE_KPH = 20;
+const END_BRAKING = 3.5;
+const topSpeed = car => car.type === 'coupe' ? 34 : (car.type === 'taxi' ? 27 : 29);
 
 function createCar(id, type, color, x, z, heading) {
   return {id, type, color, x, z, heading, speed: 0, owner: 'parked', route: null, mileage: 0, cooldown: 0};
@@ -67,6 +73,22 @@ function followLoop(actor) {
   actor.heading = s.heading;
 }
 
+// Older traffic saves used routes that ran along the lane dividers. Resume on the
+// closest point of the newly centered route, even when its length has changed.
+function nearestMileage(route, pose) {
+  let mileage = 0, nearest = Infinity;
+  for (const {start, end, from, size} of route.segments) {
+    const dx = end.x - start.x, dz = end.z - start.z;
+    const t = clamp(((pose.x - start.x) * dx + (pose.z - start.z) * dz) / (size * size), 0, 1);
+    const distance = Math.hypot(start.x + t * dx - pose.x, start.z + t * dz - pose.z);
+    if (distance < nearest) {
+      nearest = distance;
+      mileage = from + t * size;
+    }
+  }
+  return mileage;
+}
+
 // Clockwise traffic keeps right on the inner track, counterclockwise traffic on the outer track.
 function rectangle(x0, z0, x1, z1, clockwise, inset, radius) {
   const d = clockwise ? inset : -inset;
@@ -85,7 +107,7 @@ function ambientCars() {
     const taxi = i % 6 === 0;
     const car = createCar('traffic-' + i, taxi ? 'taxi' : (i % 3 ? 'sedan' : 'coupe'),
       taxi ? 0xf1ab39 : CAR_PAINTS[i % CAR_PAINTS.length], 0, 0, 0);
-    car.route = rectangle(x0, z0, x1, z1, i % 2 === 0, 4.4, 6);
+    car.route = rectangle(x0, z0, x1, z1, i % 2 === 0, laneOffsets[Math.floor(i / 2) % 2], 6);
     car.owner = 'traffic';
     car.cruise = 6 + (i * 3 % 7);
     car.mileage = (i * 109.3 + 10) % car.route.length;
@@ -163,6 +185,8 @@ export class Game {
     const hero = createCar(COUPE, 'coupe', 0x0dafa6, 5, 0, 0);
     hero.owner = 'personal';
     this.cars = [hero, ...ambientCars()];
+    this.cruise = {lane: null, get active() { return this.lane !== null; },
+      setSpeedKph: 0, gapCars: 2, following: null, overriding: false, ending: false};
     this.peds = pedestrians();
     this.time = 0;
     this.cash = 0;
@@ -181,13 +205,50 @@ export class Game {
     this.sirenDelay = 0;
     this.patrolSerial = 0;
     this.lastOffense = -100;
-    if (save && save.version === 1) this.restore(save);
+    if (save?.version === 1 || save?.version === 2) this.restore(save);
   }
 
   get car() { return this.player.carId ? this.cars.find(c => c.id === this.player.carId) : null; }
   get missionTitle() { return TITLES[this.missionIndex]; }
   get district() { return districtAt(this.player.x, this.player.z); }
   get speedKph() { return Math.round(Math.abs(this.car?.speed || 0) * 3.6); }
+  get maxCruiseKph() { return this.car ? Math.floor(topSpeed(this.car) * 3.6) : 0; }
+
+  toggleCruise() {
+    if (this.cruise.active) {
+      this.cancelCruise();
+      return;
+    }
+    const car = this.car;
+    if (!car) return;
+    const lane = acquireLane(car);
+    if (!lane) {
+      this.message('Cruise unavailable · Align with a forward lane', 2.5);
+      return;
+    }
+    if (laneEndDistance(car, lane) <= 1 + car.speed ** 2 / (2 * END_BRAKING)) {
+      this.message('Road ends ahead · Take the turn manually', 2.5);
+      return;
+    }
+    this.cruise.lane = lane;
+    this.cruise.setSpeedKph = clamp(this.speedKph, MIN_CRUISE_KPH, this.maxCruiseKph);
+  }
+
+  cancelCruise(reason) {
+    if (!this.cruise.active) return;
+    Object.assign(this.cruise, {lane: null, following: null, overriding: false, ending: false});
+    if (reason) this.message(reason, 2.5);
+  }
+
+  adjustCruiseSpeed(deltaKph) {
+    if (!this.cruise.active || !Number.isFinite(deltaKph)) return;
+    this.cruise.setSpeedKph = clamp(this.cruise.setSpeedKph + Math.round(deltaKph), MIN_CRUISE_KPH, this.maxCruiseKph);
+  }
+
+  cycleCruiseGap() {
+    if (!this.car) return;
+    this.cruise.gapCars = this.cruise.gapCars % MAX_GAP_CARS + 1;
+  }
 
   get target() {
     const stage = this.stage;
@@ -261,6 +322,7 @@ export class Game {
         const z = current.z - Math.cos(current.heading + angle) * 3;
         if (!isOpen(x, z, 0.48) || this.cars.some(c => c !== current && Math.hypot(x - c.x, z - c.z) < 2)) continue;
         Object.assign(this.player, {x, z, carId: null, heading: current.heading, moving: false, running: false});
+        this.cancelCruise();
         current.speed = 0;
         this.revision++;
         return;
@@ -338,20 +400,59 @@ export class Game {
     if (open(p.x, p.z + dz)) p.z += dz;
   }
 
+  cruiseControls(car, dt, input, steer, throttle) {
+    const cruise = this.cruise;
+    if (input.brake || input.reverse || throttle < -0.04 || Math.abs(steer) > 0.08) {
+      this.cancelCruise();
+      return null;
+    }
+    const correction = laneSteering(car, cruise.lane);
+    if (correction === null || car.speed < 0) {
+      this.cancelCruise('Lane lost · Take the wheel');
+      return null;
+    }
+    const remaining = laneEndDistance(car, cruise.lane);
+    const endSpeed = Math.sqrt(2 * END_BRAKING * Math.max(0, remaining));
+    cruise.overriding = throttle >= 0.04;
+    if (cruise.overriding) {
+      if (remaining <= 1 || car.speed >= endSpeed) {
+        this.cancelCruise('Road ends ahead · Take the wheel');
+        return null;
+      }
+      cruise.following = null;
+      cruise.ending = false;
+      return {steer: correction};
+    }
+    if (remaining <= 0.15 && car.speed < 1.5) {
+      this.cancelCruise('Road ends here · Steer to turn');
+      return {steer: correction, speed: 0};
+    }
+    const target = Math.min(cruise.setSpeedKph, endSpeed * 3.6);
+    const result = cruiseSpeed(car, this.cars, cruise.lane, target, cruise.gapCars, dt);
+    cruise.following = result.following;
+    cruise.ending = !result.following && target < cruise.setSpeedKph;
+    return {steer: correction, speed: result.speed};
+  }
+
   drive(car, dt, input) {
     const steer = clamp(finite(input.x, 0), -1, 1), throttle = clamp(finite(input.y, 0), -1, 1);
-    const top = car.type === 'coupe' ? 34 : (car.type === 'taxi' ? 27 : 29);
-    let acceleration = throttle * (throttle * car.speed < 0 ? 27 : 12.5);
-    if (Math.abs(throttle) < 0.04) acceleration = 0;
-    car.speed = clamp(car.speed + acceleration * dt, -9, top);
-    const drag = (input.brake ? 31 : acceleration ? 0.6 : 3.8) * dt;
-    car.speed = Math.sign(car.speed) * Math.max(0, Math.abs(car.speed) - drag);
+    const assist = this.cruise.active ? this.cruiseControls(car, dt, input, steer, throttle) : null;
+    if (assist?.speed != null) {
+      car.speed = assist.speed;
+    } else {
+      let acceleration = throttle * (throttle * car.speed < 0 ? 27 : 12.5);
+      if (Math.abs(throttle) < 0.04) acceleration = 0;
+      car.speed = clamp(car.speed + acceleration * dt, -9, topSpeed(car));
+      const drag = (input.brake ? 31 : acceleration ? 0.6 : 3.8) * dt;
+      car.speed = Math.sign(car.speed) * Math.max(0, Math.abs(car.speed) - drag);
+    }
     const handling = (input.brake ? 2.2 : 1.55) * Math.min(1, Math.abs(car.speed) / 4);
-    car.heading += steer * handling * Math.sign(car.speed) * dt;
+    car.heading += (assist?.steer ?? steer) * handling * Math.sign(car.speed) * dt;
     const x = car.x + Math.sin(car.heading) * car.speed * dt;
     const z = car.z - Math.cos(car.heading) * car.speed * dt;
     if (isOpen(x, z, 1.5)) { car.x = x; car.z = z; }
     else if (Math.abs(car.speed) > 1.6) {
+      this.cancelCruise('Cruise off · Take the wheel');
       car.speed *= -0.22;
     } else {
       car.speed = 0;
@@ -377,6 +478,7 @@ export class Game {
       if (!current || gap(car, current) > 3.3 || this.cooldown > 0) continue;
       const impact = Math.abs(current.speed);
       if (impact < 0.1) continue;
+      this.cancelCruise('Cruise off · Take the wheel');
       const dx = current.x - car.x, dz = current.z - car.z;
       const length = Math.max(0.01, Math.hypot(dx, dz));
       const x = car.x + dx / length * 3.45, z = car.z + dz / length * 3.45;
@@ -520,6 +622,7 @@ export class Game {
   }
 
   busted() {
+    this.cancelCruise();
     this.clearHeat();
     const fine = Math.min(this.cash, 100);
     this.cash -= fine;
@@ -611,7 +714,7 @@ export class Game {
 
   serialize() {
     const pose = ({x, z, heading}) => ({x, z, heading});
-    return {version: 1, cash: this.cash, completed: this.completed, missionIndex: this.missionIndex,
+    return {version: 2, cruiseGapCars: this.cruise.gapCars, cash: this.cash, completed: this.completed, missionIndex: this.missionIndex,
       stage: this.stage, remainingTime: this.remainingTime, time: this.time, wanted: this.wanted,
       lastOffense: this.lastOffense, capture: this.capture, escape: this.escape,
       player: {...pose(this.player), carId: this.player.carId},
@@ -619,6 +722,8 @@ export class Game {
   }
 
   restore(s) {
+    this.cancelCruise();
+    this.cruise.gapCars = integer(s.cruiseGapCars, 2, 1, MAX_GAP_CARS);
     this.time = clamp(finite(s.time, 0), 0, 1e9);
     this.cash = integer(s.cash, 0, 0, 1e9);
     this.missionIndex = integer(s.missionIndex, 0, 0, 3);
@@ -645,6 +750,7 @@ export class Game {
       if (!car) continue;
       if (car.route && saved.owner === 'traffic' && s.player?.carId !== car.id) {
         car.mileage = clamp(finite(saved.mileage, car.mileage), 0, car.route.length);
+        if (s.version === 1 && Number.isFinite(saved.x) && Number.isFinite(saved.z)) car.mileage = nearestMileage(car.route, saved);
         followLoop(car);
       } else {
         if (car.owner === 'traffic' || saved.owner === 'personal') {

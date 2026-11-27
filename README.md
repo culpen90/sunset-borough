@@ -14,6 +14,8 @@ adb install -r Sunset-Borough-1.0.0.apk
 
 In landscape, drag the left stick to walk and swipe the street view to look around. Use **Enter car** beside the coupe. Hold **Gas** with your right thumb and steer with your left. Use **Brake** to slow down and **Reverse** to back up. The gold marker and radar route lead to your next objective. Tap the radar for the full city map.
 
+Line up in a lane and tap **Set cruise** to hold your speed and keep the car between the lines. Use **− / +** to change the set speed by 5 km/h. Tap **Gap** to leave **1, 2, or 3 car lengths** between your front bumper and the car ahead. The default is 2. Cruise slows or stops behind traffic and returns to your set speed when the lane clears. Steering, braking, or reversing gives you control immediately. Hold **Gas** for a temporary speed override. You choose all turns.
+
 Taking an occupied car, hitting traffic at speed, or striking a pedestrian attracts patrols. Break contact to lose your wanted stars. If the patrols catch you, you return to Lido with a fine. Progress saves on mission changes, during play and when paused. **Continue** restores your job, money, vehicle and position on this device.
 
 ## Build and test
@@ -22,10 +24,10 @@ Open this directory in Android Studio, or use the Gradle wrapper with JDK 17 or 
 
 ```sh
 ./gradlew :app:assembleDebug :app:lintDebug
-node --test tests/campaign.mjs
+node --test tests/*.mjs
 ```
 
-The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`. The campaign test uses Node.js 22.7 or newer and exercises driving, mission payouts, pursuits, mid-mission saves and replay.
+The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`. The tests use Node.js 22.7 or newer and exercise the campaign, save compatibility, cruise speed, lane centering, bumper spacing and driver overrides.
 
 Build the release variant with `./gradlew --no-configuration-cache :app:assembleRelease`. Gradle writes the APK to `app/build/outputs/apk/release/`. A fresh clone produces an unsigned release APK. Official downloads use the project’s private signing key.
 

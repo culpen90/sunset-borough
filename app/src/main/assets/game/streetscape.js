@@ -1,5 +1,5 @@
 import * as THREE from './vendor/three.module.js';
-import {buildings, streets} from './city.js';
+import {buildings, laneMarkings, streets} from './city.js';
 import {Geometry, canvasTexture, randomFrom} from './geometry.js';
 
 const palettes=[
@@ -308,9 +308,9 @@ function roadFurniture(scene,chunkAt,chunks) {
         const [x,z]=xy(along,across);markings.floor(x,z,axis?width:len,axis?len:width,color,height);
       };
       for(const s of [-1,1]){
-        stripe(mid,s*.19,50,.12,line);
-        stripe(mid,s*9.32,50,.11,'#d8d1bc');
-        for(let n=-2;n<=2;n++) stripe(mid+n*10,s*4.9,3.25,.115,'#e5d8be');
+        stripe(mid,s*laneMarkings.yellow,50,.12,line);
+        stripe(mid,s*laneMarkings.shoulder,50,.11,'#d8d1bc');
+        for(let n=-2;n<=2;n++) stripe(mid+n*10,s*laneMarkings.divider,3.25,.115,'#e5d8be');
         for(let n=-5;n<=5;n++){
           const off=n*1.56;
           stripe(mid+s*28.1,off,2.55,.61,'#e2d4bb');
