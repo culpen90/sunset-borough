@@ -4,140 +4,119 @@ import {FollowCamera} from '../app/src/main/assets/game/camera.js';
 import {Game} from '../app/src/main/assets/game/game.js';
 
 const frame = 1 / 60;
-const difference = (to, from) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
+const radians = degrees => degrees * Math.PI / 180;
+
+function facing(actual, expected, tolerance = 0.01) {
+  const difference = Math.atan2(Math.sin(actual - expected), Math.cos(actual - expected));
+  assert.ok(Math.abs(difference) < tolerance, `Expected heading ${actual} to face ${expected}`);
+}
+
+function simulation(game, initialHeading = 0) {
+  const {player} = game;
+  const camera = new FollowCamera(initialHeading);
+  function advance(frames, input = {}) {
+    for (let i = 0; i < frames; i++) {
+      game.update(frame, {...input, cameraHeading: camera.heading});
+      camera.update(game, frame);
+    }
+  }
+  function travel(frames, input) {
+    const {x, z} = player;
+    advance(frames, input);
+    assert.ok(Math.hypot(player.x - x, player.z - z) > 0.001, 'Expected the character to move');
+    return Math.atan2(player.x - x, z - player.z);
+  }
+  return {player, camera, advance, travel};
+}
 
 function onFoot(heading = 0) {
   const game = new Game();
   Object.assign(game.player, {x: 0, z: 0, heading});
   game.cars = [];
   game.peds = [];
-  const camera = new FollowCamera(heading);
-  function advance(frames, input = {}, looking = false, stepsPerRender = 1) {
-    for (let i = 0; i < frames; i++) {
-      for (let step = 0; step < stepsPerRender; step++) game.update(frame, {...input, cameraHeading: camera.heading});
-      camera.update(game, stepsPerRender * frame, looking);
-    }
+  return simulation(game, heading);
+}
+
+test('a held forward input follows a swipe through the yaw boundary and keeps the view on release', () => {
+  const start = radians(170);
+  const {camera, advance, travel} = onFoot(start);
+  facing(travel(12, {y: 1}), start);
+  for (let i = 1; i <= 30; i++) {
+    camera.orbit(radians(3), false);
+    facing(travel(1, {y: 1}), start + radians(i * 3));
   }
-  return {player: game.player, camera, advance};
-}
-
-function facing(actual, expected, tolerance = 0.01) {
-  assert.ok(Math.abs(difference(actual, expected)) < tolerance,
-    `Expected heading ${actual} to face ${expected}`);
-}
-
-function gentleTurn(before, after, dt) {
-  const degrees = Math.abs(difference(after, before)) * 180 / Math.PI;
-  assert.ok(degrees <= 60 * dt + 1e-6,
-    `Camera turned ${degrees.toFixed(2)}° in ${(1000 * dt).toFixed(1)} ms`);
-}
-
-test('turning the stick sideways eases the view behind the character at 60 and 10 FPS', () => {
-  for (const stepsPerRender of [1, 6]) {
-    const {player, camera, advance} = onFoot();
-    advance(30, {y: 1});
-    const initial = camera.heading;
-    const dt = stepsPerRender * frame;
-    for (let steps = 0; steps < 360; steps += stepsPerRender) {
-      const before = camera.heading;
-      advance(1, {x: 1}, false, stepsPerRender);
-      gentleTurn(before, camera.heading, dt);
-      if (steps + stepsPerRender === 6) facing(camera.heading, initial, 4 * Math.PI / 180);
-    }
-    facing(player.heading, Math.PI / 2);
-    facing(camera.heading, player.heading);
-  }
+  facing(travel(45, {y: 1}), start + radians(90));
+  advance(90);
+  facing(camera.heading, start + radians(90));
 });
 
-test('idle free look holds until a step, then finishes recentering after the player stops', () => {
-  const {player, camera, advance} = onFoot(Math.PI / 2);
-  facing(camera.heading, player.heading);
-  camera.orbit(Math.PI / 2, false);
-  advance(300, {x: 0.02});
-  facing(camera.heading, Math.PI);
-  facing(player.heading, Math.PI / 2);
-
-  advance(1, {y: 1});
-  assert.ok(player.x > 0 && Math.abs(player.z) < 0.001);
-  assert.ok(Math.abs(difference(camera.heading, player.heading)) < Math.PI / 2);
-  advance(300);
-  facing(camera.heading, player.heading);
+test('a swipe while idle sets the direction of the next diagonal step', () => {
+  const {player, camera, advance, travel} = onFoot();
+  camera.orbit(2 * Math.PI / 3, false);
+  advance(60, {x: 0.02});
+  assert.deepEqual([player.x, player.z], [0, 0]);
+  facing(travel(30, {x: 0.5, y: 0.5}), 2 * Math.PI / 3 + Math.PI / 4);
+  facing(camera.heading, 2 * Math.PI / 3);
 });
 
-test('a held swipe overrides follow while walking and releasing it restores follow', () => {
-  const {player, camera, advance} = onFoot();
-  advance(15, {x: 1});
-  const pressed = camera.heading;
-  advance(15, {x: 1}, true);
-  facing(camera.heading, pressed);
-  camera.orbit(-Math.PI / 2, false);
-  advance(90, {x: 1}, true);
-  facing(camera.heading, pressed - Math.PI / 2);
-  facing(player.heading, Math.PI / 2);
-  assert.ok(player.x > 5 && Math.abs(player.z) < 0.001);
-  const release = camera.heading;
-  advance(1, {x: 1}, false, 6);
-  gentleTurn(release, camera.heading, 6 * frame);
-  advance(300, {x: 1});
-  facing(camera.heading, player.heading);
-});
-
-test('holding or repeating down backpedals without turning the player or camera', () => {
+test('switching from forward to backward and repeating a backstep preserves facing and view', () => {
   const heading = Math.PI / 2;
-  const {player, camera, advance} = onFoot(heading);
-  advance(30, {y: 1});
+  const {player, camera, advance, travel} = onFoot(heading);
+  facing(travel(30, {y: 1}), heading);
   for (let pull = 0; pull < 2; pull++) {
-    for (let i = 0; i < 180; i++) {
-      const x = player.x;
-      advance(1, {y: -1});
-      assert.ok(player.x < x);
-      assert.ok(Math.abs(player.z) < 0.001);
-      facing(player.heading, heading);
-      facing(camera.heading, heading);
-    }
+    facing(travel(90, {y: -1}), heading + Math.PI);
+    facing(player.heading, heading);
+    facing(camera.heading, heading);
     advance(1);
   }
-  const x = player.x;
-  advance(30, {y: 1});
-  assert.ok(player.x > x + 2);
 });
 
-test('a diagonal backstep uses the view after idle free look', () => {
-  const {player, camera, advance} = onFoot();
-  camera.orbit(Math.PI, false);
-  advance(30, {x: 0.5, y: -0.5});
-  assert.ok(player.z < -1 && player.x < -1);
-  assert.ok(Math.abs(player.x - player.z) < 0.001);
-  facing(player.heading, Math.PI);
-});
+for (const [side, sign] of [['left', -1], ['right', 1]]) {
+  test(`sliding from ${side} to up after a swipe moves forward in the new view`, () => {
+    const {camera, travel} = onFoot();
+    facing(travel(45, {x: sign}), sign * Math.PI / 2);
+    facing(camera.heading, 0);
+    const yaw = sign * radians(100);
+    camera.orbit(yaw, false);
+    facing(travel(12, {x: sign}), yaw + sign * Math.PI / 2);
+    facing(travel(24, {y: 1}), yaw);
+    facing(camera.heading, yaw);
+  });
 
-test('sliding a held stick from sideways to down backs up along the new camera heading', () => {
-  const {player, camera, advance} = onFoot();
-  advance(240, {x: 1});
-  assert.ok(player.x > 8 && Math.abs(player.z) < 0.001);
-  facing(camera.heading, Math.PI / 2);
-  const {x, z} = player;
-  advance(30, {y: -1});
-  assert.ok(player.x < x - 2 && Math.abs(player.z - z) < 0.01);
-  facing(player.heading, Math.PI / 2);
-});
+  test(`sweeping from near-horizontal into a ${side} backstep keeps movement and facing smooth`, () => {
+    const {player, camera, travel} = onFoot();
+    const yaw = radians(-35);
+    camera.orbit(yaw, false);
+    function steer(degrees, frames) {
+      const angle = sign * radians(degrees);
+      facing(travel(frames, {x: 0.4 * Math.sin(angle), y: 0.4 * Math.cos(angle)}), yaw + angle);
+    }
+    function nudge(degrees) {
+      const before = player.heading;
+      steer(degrees, 1);
+      facing(player.heading, before, radians(10));
+      facing(camera.heading, yaw);
+    }
+    steer(90, 45);
+    for (let degrees = 91; degrees <= 135; degrees++) nudge(degrees);
+    for (let degrees = 134; degrees >= 90; degrees--) nudge(degrees);
+  });
+}
 
-test('a small downward drift on a sideways drag keeps the player moving to the side', () => {
-  const {player, advance} = onFoot();
-  advance(240, {x: 1});
-  const {x, z} = player;
-  advance(30, {x: 1, y: -0.05});
-  assert.ok(player.x > x + 2 && Math.abs(player.z - z) < 0.2);
-  facing(player.heading, Math.atan2(1, -0.05));
-});
-
-test('following a stationary turn across the angle boundary takes the shorter path', () => {
-  const start = Math.PI - 0.1;
-  const {player, camera, advance} = onFoot(start);
-  player.heading = -Math.PI + 0.1;
-  advance(1);
-  const turn = difference(camera.heading, start);
-  assert.ok(turn > 0 && turn <= 0.201);
-  advance(120);
-  facing(camera.heading, player.heading);
+test('the driving camera follows a steered turn and recenters after a manual orbit', () => {
+  const game = new Game();
+  game.interact();
+  assert.ok(game.car);
+  const {camera, advance} = simulation(game, game.car.heading);
+  advance(40, {y: 1});
+  advance(40, {y: 1, x: 0.5});
+  assert.ok(camera.heading > 0.1 && game.car.heading > camera.heading);
+  advance(90, {brake: true});
+  facing(camera.heading, game.car.heading);
+  camera.orbit(Math.PI / 2, true);
+  const manualView = camera.heading;
+  advance(90);
+  facing(camera.heading, manualView);
+  advance(240);
+  facing(camera.heading, game.car.heading);
 });

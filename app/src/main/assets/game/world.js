@@ -202,7 +202,8 @@ export class CityView {
     const goalFov=(car?55+Math.min(speed*.19,8):54)+(this.camera.aspect<1.25?7:0);
     const easing=this.firstFrame?1:(1-Math.exp(-dt*14));
     this.follow.set(p.x+dx*boom,ground+goalHeight,p.z+dz*boom);
-    this.camera.position.lerp(this.follow,easing);
+    if(car)this.camera.position.lerp(this.follow,easing);
+    else this.camera.position.copy(this.follow);
     // A fast move out of a tight alley must also bring a lagging camera back through the opening.
     const actualX=this.camera.position.x-p.x,actualZ=this.camera.position.z-p.z;
     const actualBoom=boomFraction(p.x,p.z,actualX,actualZ);

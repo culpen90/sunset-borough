@@ -204,7 +204,7 @@ function frame(stamp) {
     cameraHeading: camera.heading
   };
   while (accumulator >= 1/60) { game.update(1/60, input); accumulator -= 1/60; }
-  camera.update(game, Math.min(dt, .10), lookPointer !== null);
+  camera.update(game, Math.min(dt, .10));
   view.render(game, dt, camera.heading);sound.update(game);
   if (game.time >= hudAfter) { refreshHUD(); hudAfter = game.time + .085; }
   if (game.time >= nextSave || game.revision !== savedRevision && !failedSave) save();
@@ -246,7 +246,10 @@ look.addEventListener('pointerdown',ev => {
 });
 look.addEventListener('pointermove',ev => {
   if(ev.pointerId!==lookPointer)return;
-  camera.orbit((lookX-ev.clientX)*.007, game.player.carId !== null);lookX=ev.clientX;
+  const driving = game.player.carId !== null;
+  const drag = ev.clientX - lookX;
+  camera.orbit((driving ? -drag : drag) * .007, driving);
+  lookX = ev.clientX;
 });
 look.addEventListener('lostpointercapture',ev => {
   if(ev.pointerId===lookPointer)lookPointer=null;

@@ -3,7 +3,6 @@ import {acquireLane, cruiseSteering, laneEndDistance, laneOffsets} from './cruis
 import {cruiseSpeed, pedalBraking} from './cruise-speed.js';
 
 const TAU = 2 * Math.PI;
-const SIDEWAYS_MAX_SLOPE = Math.tan(Math.PI / 8);
 const clamp = (n, low, high) => Math.min(high, Math.max(low, n));
 const gap = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const finite = (n, fallback) => Number.isFinite(n) ? n : fallback;
@@ -391,22 +390,24 @@ export class Game {
     const magnitude = Math.hypot(x, y);
     const p = this.player;
     const moving = magnitude > 0.08;
-    // Treat the three rear stick directions as backsteps. A near-horizontal drag is a side turn.
-    const backpedaling = moving && y < -Math.abs(x) * SIDEWAYS_MAX_SLOPE;
-    // Start a backstep relative to the view, even when sliding the stick down mid-turn.
-    // Hold that reference for the gesture so camera follow cannot steer the character.
-    if (!p.moving || (backpedaling && !p.backpedaling)) {
-      this.walkBasis = backpedaling ? finite(input.cameraHeading, p.heading) : p.heading;
-    }
+    if (!p.moving) this.walkBasis = p.heading;
+    const viewHeading = finite(input.cameraHeading, this.walkBasis);
     p.moving = moving;
     p.running = moving && !!input.run;
-    p.backpedaling = backpedaling;
-    if (!moving) return;
-    const heading = this.walkBasis + Math.atan2(x, y);
+    if (!moving) {
+      p.backpedaling = false;
+      return;
+    }
+    const stickAngle = Math.atan2(x, y);
+    const heading = viewHeading + stickAngle;
     const distance = (p.running ? 9.3 : 5.5) * dt * Math.min(1, magnitude);
     const dx = Math.sin(heading) * distance, dz = -Math.cos(heading) * distance;
-    const facing = p.backpedaling ? this.walkBasis : heading;
+    // From sideways to diagonally back, ease from facing travel to facing the view.
+    const rear = clamp((Math.abs(stickAngle) - Math.PI / 2) / (Math.PI / 4), 0, 1);
+    const blend = rear * rear * (3 - 2 * rear);
+    const facing = viewHeading + stickAngle * (1 - blend);
     p.heading += angleDiff(facing, p.heading) * (1 - Math.exp(-18 * dt));
+    p.backpedaling = Math.cos(heading - p.heading) < 0;
     const open = (x, z) => isOpen(x, z, 0.46) && !this.cars.some(c => Math.hypot(c.x - x, c.z - z) < 1.55);
     if (open(p.x + dx, p.z)) p.x += dx;
     if (open(p.x, p.z + dz)) p.z += dz;
