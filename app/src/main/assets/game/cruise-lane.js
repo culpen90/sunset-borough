@@ -1,4 +1,5 @@
 import {carRadius, laneMarkings, streetAt, streets, worldLimit} from './city.js';
+import {stopLineOffset} from './traffic-lights.js';
 
 // Centers between the double yellow, dashed divider and shoulder in streetscape.js.
 export const laneOffsets = [
@@ -15,7 +16,7 @@ const outerStreet = streets[streets.length - 1];
 const roadHalfWidth = 10;
 const sidewalkReach = 15;
 // Stop with the front bumper behind the painted stop bar, 14.25 m before the junction center.
-const stoppingPosition = outerStreet - 14.25 - 2.7;
+const stoppingPosition = outerStreet - stopLineOffset - 2.7;
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 const forward = (car, lane) => car.x * lane.forwardX + car.z * lane.forwardZ;
 const lateral = (car, lane) => car.x * lane.rightX + car.z * lane.rightZ;

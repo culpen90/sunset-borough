@@ -20,6 +20,8 @@ Tap **Set cruise** on or beside a street. If you’re on the wrong side, on the 
 
 Use **− / +** to change the set speed by 5 km/h. Tap **Gap** to leave **1, 2, or 3 car lengths** between your front bumper and the car ahead. The default is 2. Cruise slows for turns and traffic and resumes your set speed when the lane clears. Hold **Gas** for a temporary speed override. Brake, reverse, or tap cruise again to cancel.
 
+Cars travel in groups along the main streets, so a junction can be busy for a while and then clear. At traffic lights, drivers go on green, stop on yellow if they have room, and wait behind the line on red. Adaptive cruise follows the same signals.
+
 Taking an occupied car, hitting traffic at speed, or striking a pedestrian attracts patrols. Break contact to lose your wanted stars. If the patrols catch you, you return to Lido with a fine. Progress saves on mission changes, during play and when paused. **Continue** restores your job, money, vehicle and position on this device.
 
 ## Build and test

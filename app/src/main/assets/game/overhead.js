@@ -1,4 +1,7 @@
 import { buildings, laneMarkings, streets } from './city.js';
+import { signalAt, signalHeads, stopLineOffset } from './traffic-lights.js';
+
+const signalColors = {stop:'#ff5046', yield:'#ffcd36', go:'#42f994'};
 
 // Software-rendered overhead view for WebViews whose graphics driver disables WebGL.
 export class OverheadView {
@@ -29,6 +32,12 @@ export class OverheadView {
       }
     }
     g.stroke();
+    g.fillStyle='#e2d4bb';
+    for (const {junction,yaw} of signalHeads) {
+      g.save();g.translate(junction.x,junction.z);g.rotate(-yaw);
+      g.fillRect(.45,stopLineOffset-.18,8.6,.36);
+      g.restore();
+    }
     for (const b of buildings) {
       const x=b.x-b.w/2,z=b.z-b.d/2;
       g.fillStyle='#5d4e50';g.fillRect(x+2,z+2,b.w,b.d);
@@ -62,6 +71,14 @@ export class OverheadView {
     if (!game.player.carId){
       c.save();c.translate(game.player.x,game.player.z);c.rotate(game.player.heading);
       c.fillStyle='#1f676e';c.fillRect(-.8,-.3,1.6,1);c.fillStyle='#ffc297';c.beginPath();c.arc(0,-.25,.48,0,Math.PI*2);c.fill();c.restore();
+    }
+    for (const {x,z,junction,axis,yaw} of signalHeads) {
+      c.save();c.translate(x,z);c.rotate(-yaw);
+      c.fillStyle='#586565';c.fillRect(0,-.12,6,.24);c.fillRect(5.65,-.35,.7,.7);
+      c.fillStyle='#29343a';c.fillRect(-1.04,-.77,2.08,1.7);
+      c.fillStyle=signalColors[signalAt(junction.x,junction.z,axis,game.time)];
+      c.beginPath();c.arc(0,.13,.59,0,Math.PI*2);c.fill();
+      c.restore();
     }
     if(game.target){c.strokeStyle='#ffd575';c.lineWidth=.45;c.beginPath();c.arc(game.target.x,game.target.z,3.9+Math.sin(game.time*4)*.35,0,Math.PI*2);c.stroke();}
   }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {Game} from '../app/src/main/assets/game/game.js';
+import {signalAt} from '../app/src/main/assets/game/traffic-lights.js';
 
 const frame = 1 / 60;
 
@@ -20,6 +21,16 @@ function driving(pose = {}) {
 function near(actual, expected, tolerance) {
   assert.ok(Math.abs(actual - expected) <= tolerance,
     `Expected ${actual} to be within ${tolerance} of ${expected}`);
+}
+
+function startOnGreen(game, x, z, axis) {
+  for (let t = 0; t < 60; t++) {
+    if (signalAt(x, z, axis, t) === 'go' && signalAt(x, z, axis, t - 1) !== 'go') {
+      game.time = t;
+      return;
+    }
+  }
+  assert.fail('Expected a green phase for the test approach');
 }
 
 test('set captures road speed and the speed buttons respect each vehicle limit', () => {
@@ -48,6 +59,7 @@ test('holds each painted lane straight through an intersection in all four direc
     for (const [offset, center] of [[1.6, 2.55], [8.2, 7.1]]) {
       const game = driving({x: rightX * offset - 30 * forwardX, z: rightZ * offset - 30 * forwardZ,
         heading: heading + 0.1, speed: 10});
+      startOnGreen(game, 0, 0, forwardX ? 'x' : 'z');
       game.toggleCruise();
       run(game, 6);
       const car = game.car;
@@ -71,6 +83,7 @@ test('acquires a forward lane from the opposing lane, centerline and shoulder in
       const x = 80 + offset * rightX - 35 * forwardX;
       const z = -80 + offset * rightZ - 35 * forwardZ;
       const game = driving({x, z, heading: heading + yaw, speed});
+      startOnGreen(game, 80, -80, forwardX ? 'x' : 'z');
       const car = game.car;
       game.toggleCruise();
       assert.equal(game.cruise.active, true, `heading ${heading}, lateral offset ${offset}`);
@@ -127,7 +140,8 @@ test('keeps cruise unavailable when reversing or deep inside a city block', () =
 });
 
 test('stops for a parked car, resumes when the lane clears and detects a new lead', () => {
-  const game = driving({speed: 20});
+  // This perimeter street has no signals to interrupt the following-distance check.
+  const game = driving({x: 242.55, speed: 20});
   const car = game.car;
   const parked = {...car, id: 'parked', z: car.z - 62, speed: 0, owner: 'parked'};
   game.cars.push(parked);
@@ -138,7 +152,7 @@ test('stops for a parked car, resumes when the lane clears and detects a new lea
   near(car.z - parked.z, 15, 0.5);
   assert.equal(game.wanted, 0);
 
-  parked.x = 7.1;
+  parked.x = 247.1;
   run(game, 8);
   assert.equal(game.cruise.following, null);
   near(game.speedKph, 72, 1);
@@ -172,7 +186,7 @@ test('chooses the nearest same-lane lead amid crossing, oncoming and adjacent ca
 test('adjusts following distance behind moving traffic and stays straight when the lead turns', () => {
   const game = new Game();
   game.interact();
-  const lead = game.cars.find(car => car.id === 'traffic-8');
+  const lead = game.cars.find(car => car.id === 'traffic-36');
   const straight = lead.route.segments.find(s => s.heading === 0 && s.size > 190);
   Object.assign(lead, straight.start, {heading: straight.heading, speed: lead.cruise, mileage: straight.from});
   const car = game.car;
@@ -209,14 +223,14 @@ test('adjusts following distance behind moving traffic and stays straight when t
 });
 
 test('gives the driver control at the end of the road', () => {
-  const game = driving({z: -100, speed: 27});
+  const game = driving({x: 82.55, z: -100, speed: 27});
   game.toggleCruise();
   assert.equal(game.cruise.active, true);
   run(game, 14);
   assert.equal(game.cruise.active, false);
   near(game.car.speed, 0, 0.1);
   near(game.car.z, -223.05, 1);
-  near(game.car.x, 2.55, 0.1);
+  near(game.car.x, 82.55, 0.1);
   game.toggleCruise();
   assert.equal(game.cruise.active, false);
 });
@@ -239,7 +253,7 @@ test('keeps the selected bumper gap as stopped traffic starts moving again', () 
   for (const gapCars of [1, 2, 3]) {
     const game = new Game();
     game.interact();
-    const lead = game.cars.find(car => car.id === 'traffic-8');
+    const lead = game.cars.find(car => car.id === 'traffic-36');
     const straight = lead.route.segments.find(s => s.heading === 0 && s.size > 190);
     Object.assign(lead, straight.start, {heading: 0, speed: 0, cruise: 0, mileage: straight.from});
     const car = game.car;
@@ -274,17 +288,17 @@ test('steering mid-block keeps cruise active and centers the car again on releas
 });
 
 test('recovers into the new forward lane when a mid-block U-turn ends on the wrong side', () => {
-  const game = driving({x: 7.11, z: 120, speed: 5.5});
+  const game = driving({x: 87.11, z: 120, speed: 5.5});
   const car = game.car;
   game.toggleCruise();
   for (let i = 0; i < 4 * 60 && car.heading > -Math.PI; i++) game.update(frame, {x: -1});
-  assert.ok(car.x >= 0 && Math.cos(car.heading) < -0.99, 'finished facing south on the northbound side');
+  assert.ok(car.x >= 80 && Math.cos(car.heading) < -0.99, 'finished facing south on the northbound side');
 
   const releaseZ = car.z;
   run(game, 8);
   assert.equal(game.cruise.active, true);
   assert.ok(car.z - releaseZ > 25);
-  near(car.x, -2.55, 0.12);
+  near(car.x, 80 - 2.55, 0.12);
   near(Math.cos(car.heading), -1, 0.0003);
 });
 

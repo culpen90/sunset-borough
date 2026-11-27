@@ -1,6 +1,7 @@
 import {carRadius, districtAt, isOpen, streetAt} from './city.js';
 import {occupiedLane, recoveryLane, cruiseSteering, recoverySpeedLimit, laneEndDistance, laneOffsets} from './cruise-lane.js';
 import {cruiseSpeed, pedalBraking} from './cruise-speed.js';
+import {ambientSpeed, signalSpeedLimit} from './traffic-driver.js';
 
 const TAU = 2 * Math.PI;
 const clamp = (n, low, high) => Math.min(high, Math.max(low, n));
@@ -10,6 +11,8 @@ const integer = (n, fallback, low, high) => clamp(Math.trunc(finite(n, fallback)
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 const point = (x, z, label) => ({x, z, label});
 
+const COUPE_START = {x: 9.8, z: 27};
+const PLAYER_START = {x: 12, z: 31};
 const RECORD_SHOP = point(5, -71, 'Lido Records');
 const LISTENING_ROOM = point(161, -81, 'Marina club');
 const START_GATE = point(165, -144, 'Starting gate');
@@ -100,26 +103,54 @@ function rectangle(x0, z0, x1, z1, clockwise, inset, radius) {
 
 function ambientCars() {
   const cars = [];
+  function addCar(route, mileage, speed) {
+    const i = cars.length;
+    const taxi = i % 6 === 0;
+    const car = createCar('traffic-' + i, taxi ? 'taxi' : (i % 3 ? 'sedan' : 'coupe'),
+      taxi ? 0xf1ab39 : CAR_PAINTS[i % CAR_PAINTS.length], 0, 0, 0);
+    Object.assign(car, {route, owner: 'traffic', cruise: speed, mileage});
+    followLoop(car);
+    cars.push(car);
+  }
+
   for (let i = 0; i < 25; i++) {
     const x0 = -240 + (i % 5) * 80;
     const z0 = -240 + (Math.floor(i / 5)) * 80;
     const x1 = Math.min(240, x0 + 80 * (2 + (i % 3 === 0)));
     const z1 = Math.min(240, z0 + 80 * (2 + (i % 4 === 0)));
-    const taxi = i % 6 === 0;
-    const car = createCar('traffic-' + i, taxi ? 'taxi' : (i % 3 ? 'sedan' : 'coupe'),
-      taxi ? 0xf1ab39 : CAR_PAINTS[i % CAR_PAINTS.length], 0, 0, 0);
-    car.route = rectangle(x0, z0, x1, z1, i % 2 === 0, laneOffsets[Math.floor(i / 2) % 2], 6);
-    car.owner = 'traffic';
-    car.cruise = 6 + (i * 3 % 7);
-    car.mileage = (i * 109.3 + 10) % car.route.length;
-    followLoop(car);
-    if (Math.hypot(car.x - 5, car.z) < 18) {
-      car.mileage += 38;
-      followLoop(car);
+    const route = rectangle(x0, z0, x1, z1, i % 2 === 0, laneOffsets[Math.floor(i / 2) % 2], 6);
+    addCar(route, i * 109.3 + 10, 6 + (i * 3 % 7));
+  }
+
+  // Small groups share longer routes through Lido, the marina and the west side.
+  // Each group passes through, leaving a lull while it travels around the other blocks.
+  const groups = [
+    {route: rectangle(-80, -160, 0, 80, true, laneOffsets[1], 6), start: point(-7, -25), count: 3, speed: 10},
+    {route: rectangle(-160, -80, 160, 0, false, laneOffsets[0], 6), start: point(-32, 3), count: 4, speed: 9},
+    {route: rectangle(80, -160, 160, 160, false, laneOffsets[1], 6), start: point(84, 156), count: 3, speed: 11},
+    {route: rectangle(-240, -80, -80, 160, true, laneOffsets[0], 6), start: point(-84, 110), count: 3, speed: 8},
+  ];
+  for (const {route, start, count, speed} of groups) {
+    const first = nearestMileage(route, start);
+    for (let i = 0; i < count; i++) {
+      addCar(route, route.length + first - i * 15, speed + i % 2);
     }
-    cars.push(car);
   }
   return cars;
+}
+
+function spaceNewTraffic(cars, player, savedIds) {
+  const placed = cars.filter(car => !car.route || savedIds.has(car.id));
+  for (const car of cars) {
+    if (!car.route || savedIds.has(car.id)) continue;
+    // Older saves can put existing vehicles anywhere along a newly added route.
+    for (let offset = 0; offset < car.route.length; offset += 9) {
+      if (gap(car, player) >= 12 && placed.every(other => gap(car, other) >= 7)) break;
+      car.mileage += 9;
+      followLoop(car);
+    }
+    placed.push(car);
+  }
 }
 
 function pedestrians() {
@@ -182,13 +213,13 @@ function patrolRoute(car, player) {
 
 export class Game {
   constructor(save = null) {
-    this.player = {x: 5, z: 7, heading: 0, carId: null, moving: false, running: false, backpedaling: false, strikeTime: 0};
-    const hero = createCar(COUPE, 'coupe', 0x0dafa6, 5, 0, 0);
+    this.player = {...PLAYER_START, heading: 0, carId: null, moving: false, running: false, backpedaling: false, strikeTime: 0};
+    const hero = createCar(COUPE, 'coupe', 0x0dafa6, COUPE_START.x, COUPE_START.z, 0);
     hero.owner = 'personal';
     this.cars = [hero, ...ambientCars()];
     this.cruise = {lane: null, maneuver: null, get active() { return this.lane !== null; },
       get driverSteering() { return this.maneuver !== null && this.maneuver.releasedFor < STEERING_RELEASE_DELAY; },
-      setSpeedKph: 0, gapCars: 2, following: null, overriding: false, ending: false};
+      setSpeedKph: 0, gapCars: 2, following: null, atSignal: false, overriding: false, ending: false};
     this.peds = pedestrians();
     this.time = 0;
     this.cash = 0;
@@ -208,6 +239,7 @@ export class Game {
     this.patrolSerial = 0;
     this.lastOffense = -100;
     if (save?.version === 1 || save?.version === 2) this.restore(save);
+    else spaceNewTraffic(this.cars, this.player, new Set());
   }
 
   get car() { return this.player.carId ? this.cars.find(c => c.id === this.player.carId) : null; }
@@ -241,7 +273,7 @@ export class Game {
 
   cancelCruise(reason) {
     if (!this.cruise.active) return;
-    Object.assign(this.cruise, {lane: null, maneuver: null, following: null, overriding: false, ending: false});
+    Object.assign(this.cruise, {lane: null, maneuver: null, following: null, atSignal: false, overriding: false, ending: false});
     if (reason) this.message(reason, 2.5);
   }
 
@@ -433,6 +465,7 @@ export class Game {
         return null;
       }
       cruise.following = null;
+      cruise.atSignal = false;
       cruise.ending = false;
       return {steer: correction};
     }
@@ -453,7 +486,11 @@ export class Game {
     cruise.ending = !result.following && endSpeed < Math.min(cruise.setSpeedKph / 3.6, cornerSpeed);
     const curbLimit = cruise.maneuver && !cruise.driverSteering
       ? recoverySpeedLimit(car, cruise.lane) : Infinity;
-    const speed = Math.min(result.speed, Math.max(cornerSpeed, car.speed - pedalBraking * dt), curbLimit);
+    const axis = cruise.lane.forwardX ? 'x' : 'z';
+    const lightLimit = signalSpeedLimit(car, axis, cruise.lane.forwardX || cruise.lane.forwardZ, this.time, dt);
+    const freeSpeed = Math.min(result.speed, Math.max(cornerSpeed, car.speed - pedalBraking * dt), curbLimit);
+    cruise.atSignal = lightLimit <= freeSpeed;
+    const speed = Math.min(freeSpeed, lightLimit);
     return {steer: correction, speed, pivot: curbLimit < result.speed};
   }
 
@@ -490,12 +527,7 @@ export class Game {
     for (const car of this.cars) {
       if (car === current || car.owner === 'patrol') continue;
       if (car.route) {
-        const dx = player.x - car.x, dz = player.z - car.z;
-        const ahead = dx * Math.sin(car.heading) - dz * Math.cos(car.heading);
-        const lateral = Math.abs(dx * Math.cos(car.heading) + dz * Math.sin(car.heading));
-        const yielding = ahead > -1 && ahead < 10 && lateral < 2.7;
-        const targetSpeed = yielding ? 0 : car.cruise;
-        car.speed += clamp(targetSpeed - car.speed, -25 * dt, 8 * dt);
+        car.speed = ambientSpeed(car, this.cars, player, this.time, dt);
         car.mileage += Math.max(0, car.speed) * dt;
         followLoop(car);
       }
@@ -652,8 +684,8 @@ export class Game {
     this.cash -= fine;
     if (this.car) this.car.speed = 0;
     const hero = this.cars.find(c => c.id === COUPE);
-    Object.assign(hero, {x: 5, z: 0, heading: 0, speed: 0});
-    Object.assign(this.player, {x: 5, z: 7, heading: 0, carId: null, moving: false, running: false, backpedaling: false});
+    Object.assign(hero, COUPE_START, {heading: 0, speed: 0});
+    Object.assign(this.player, PLAYER_START, {heading: 0, carId: null, moving: false, running: false, backpedaling: false});
     if (this.missionIndex === 1) {
       this.stage = 0;
       this.remainingTime = null;
@@ -758,7 +790,8 @@ export class Game {
     this.lastOffense = clamp(finite(s.lastOffense, -100), -100, this.time);
     this.escape = clamp(finite(s.escape, 0), 0, SEARCH_TIME);
     this.capture = clamp(finite(s.capture, 0), 0, 1);
-    const savedCars = Array.isArray(s.cars) ? s.cars.slice(0, 32) : [];
+    // Include room for the mission coupe and all three patrols in addition to the city fleet.
+    const savedCars = Array.isArray(s.cars) ? s.cars.slice(0, this.cars.length + 4) : [];
     if (this.missionIndex >= 2 || savedCars.some(c => c?.id === HOT_CAR)) this.prepareHotCar();
     let patrols = 0;
     for (const saved of savedCars) {
@@ -792,6 +825,7 @@ export class Game {
       Object.assign(this.player, {x: current.x, z: current.z, heading: current.heading, carId: current.id});
       if (this.missionIndex === 0 && this.stage === 0) this.stage = 1;
     } else restorePose(this.player, s.player, 0.46);
+    spaceNewTraffic(this.cars, this.player, new Set(savedCars.map(c => c?.id)));
     for (const p of this.peds) {
       p.mileage += this.time * p.speed;
       followLoop(p);

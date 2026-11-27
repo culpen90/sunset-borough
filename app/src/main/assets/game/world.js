@@ -103,7 +103,7 @@ export class CityView {
     this.scene.add(new THREE.HemisphereLight(0xffeee0,0xb5a7ae,1.6));
     const light=new THREE.DirectionalLight(0xffdfb2,1.65);
     light.position.set(-105,150,-68);this.scene.add(light);
-    buildStreets(this.scene);
+    this.updateLights=buildStreets(this.scene);
     this.camera=new THREE.PerspectiveCamera(53,1,.09,800);
     this.hero=personModel(0,true);this.scene.add(this.hero);
     this.shadows=blobShadows();this.scene.add(this.shadows);
@@ -212,6 +212,7 @@ export class CityView {
     this.camera.lookAt(this.look);
     if(Math.abs(this.camera.fov-goalFov)>.12){this.camera.fov+= (goalFov-this.camera.fov)*easing;this.camera.updateProjectionMatrix();}
     this.sky.position.copy(this.camera.position);
+    this.updateLights(game.time);
     this.updateActors(game,dt);
     const target=game.target;
     this.marker.visible=!!target;
