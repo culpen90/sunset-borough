@@ -52,7 +52,7 @@ function clearInput() {
   document.querySelectorAll('.pressed').forEach(btn => btn.classList.remove('pressed'));
 }
 function setPanel(next) {
-  if (panel === 'play' && next !== 'play') { save();sound.stop(); }
+  if (panel === 'play' && next !== 'play') { game.cancelCruise();save();sound.stop(); }
   clearInput();
   panel = next;
   el('titleScreen').hidden = next !== 'title';
@@ -133,6 +133,25 @@ window.addEventListener('blur', clearInput);
 window.addEventListener('resize', () => { if(panel==='map')drawMap(el('atlas'),game,true); });
 document.addEventListener('contextmenu', e => e.preventDefault());
 
+function refreshCruiseHUD() {
+  const { active, following, overriding, ending, setSpeedKph, gapCars } = game.cruise;
+  el('cruiseToggle').setAttribute('aria-pressed', String(active));
+  el('cruiseTarget').hidden = el('cruiseSlower').hidden = el('cruiseFaster').hidden = !active;
+  setText('cruiseDistance', gapCars === 1 ? '1 car' : gapCars + ' cars');
+  const gapLabel = gapCars === 1 ? '1 car length' : gapCars + ' car lengths';
+  el('cruiseGap').setAttribute('aria-label', 'Change following gap, currently ' + gapLabel);
+  if (!active) {
+    setText('cruiseMode', 'Set cruise');
+    setText('cruiseTarget', '');
+    return;
+  }
+  const mode = overriding ? 'Gas override' : ending ? 'Road end' : following ? 'Following' : 'Cruising';
+  setText('cruiseMode', mode);
+  setText('cruiseTarget', 'Set ' + setSpeedKph + ' km/h');
+  el('cruiseSlower').disabled = setSpeedKph <= 20;
+  el('cruiseFaster').disabled = setSpeedKph >= game.maxCruiseKph;
+}
+
 function refreshHUD() {
   const driving = game.player.carId != null;
   const action = game.actionLabel;
@@ -153,6 +172,7 @@ function refreshHUD() {
   const timer = seconds == null ? '' : Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2,'0');
   setText('range', [range, timer].filter(Boolean).join('  ·  '));
   setText('district', game.district);
+  if (driving) refreshCruiseHUD();
   if (driving && el('speed').dataset.value !== String(game.speedKph)) {
     el('speed').dataset.value = String(game.speedKph);
     el('speed').textContent = game.speedKph;
@@ -174,6 +194,7 @@ function frame(stamp) {
     x: Math.min(1, Math.max(-1, stick.x + down('ArrowRight','KeyD','right') - down('ArrowLeft','KeyA','left'))),
     y: Math.min(1, Math.max(-1, stick.y + down('ArrowUp','KeyW') - down('ArrowDown','KeyS','reverse') + (driving ? down('boost') : 0))),
     run: !!down('ShiftLeft','ShiftRight','boost'), brake: !!down('Space','brake'),
+    reverse: !!down('ArrowDown','KeyS','reverse'),
     cameraHeading: view.heading || 0
   };
   while (accumulator >= 1/60) { game.update(1/60, input); accumulator -= 1/60; }
@@ -228,6 +249,18 @@ el('titleHelp').onclick=el('helpOpen').onclick=() => subpanel('help');
 el('radarButton').onclick=el('mapOpen').onclick=() => subpanel('map');
 el('pauseButton').onclick=pauseForSystem;
 el('action').onclick=interact;el('strike').onclick=strike;
+const cruiseActions = {
+  cruiseToggle: () => game.toggleCruise(),
+  cruiseSlower: () => game.adjustCruiseSpeed(-5),
+  cruiseFaster: () => game.adjustCruiseSpeed(5),
+  cruiseGap: () => game.cycleCruiseGap()
+};
+for (const [id, action] of Object.entries(cruiseActions)) {
+  el(id).onclick = () => { action(); refreshHUD(); };
+}
+const cruiseShortcuts = {
+  KeyC: 'cruiseToggle', BracketLeft: 'cruiseSlower', BracketRight: 'cruiseFaster', KeyG: 'cruiseGap'
+};
 el('toTitle').onclick=() => {save();setPanel('title');};
 el('titleSound').onclick=el('pauseSound').onclick=toggleSound;
 el('replay').onclick=() => {game.replayJobs();save();setPanel('play');};
@@ -236,6 +269,12 @@ document.addEventListener('keydown',ev => {
   if (ev.code === 'Escape' && !ev.repeat) { ev.preventDefault();back();return; }
   if (ev.code === 'KeyM' && panel === 'map' && !ev.repeat) {back();return;}
   if (panel !== 'play') return;
+  const cruiseButton = cruiseShortcuts[ev.code];
+  if (cruiseButton && !el(cruiseButton).closest('[hidden]')) {
+    ev.preventDefault();
+    if (!ev.repeat) el(cruiseButton).click();
+    return;
+  }
   if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(ev.code)) ev.preventDefault();
   if (!ev.repeat) {
     if(ev.code==='KeyE')interact();

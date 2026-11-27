@@ -1,4 +1,4 @@
-import { buildings, streets } from './city.js';
+import { buildings, laneMarkings, streets } from './city.js';
 
 // Software-rendered overhead view for WebViews whose graphics driver disables WebGL.
 export class OverheadView {
@@ -19,6 +19,15 @@ export class OverheadView {
     g.beginPath();
     for (const r of streets) for (let j=-240;j<240;j+=80) {
       g.moveTo(j+12,r);g.lineTo(j+68,r);g.moveTo(r,j+12);g.lineTo(r,j+68);
+    }
+    g.stroke();
+    g.strokeStyle='#ddd3bc';g.lineWidth=.28;g.setLineDash([3.25,6.75]);
+    g.beginPath();
+    for (const r of streets) for (let j=-240;j<240;j+=80) {
+      for (const offset of [-laneMarkings.divider, laneMarkings.divider]) {
+        g.moveTo(j+18.4,r+offset);g.lineTo(j+62,r+offset);
+        g.moveTo(r+offset,j+18.4);g.lineTo(r+offset,j+62);
+      }
     }
     g.stroke();
     for (const b of buildings) {
