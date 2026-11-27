@@ -5,7 +5,6 @@ export class OverheadView {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
-    this.heading = 0;
     this.ground = document.createElement('canvas');
     const g = this.ground.getContext('2d');
     this.ground.width = this.ground.height = 1160;
@@ -39,8 +38,7 @@ export class OverheadView {
     }
   }
 
-  orbit() {}
-  render(game) {
+  render(game, dt, heading) {
     const canvas=this.canvas, c=this.ctx, w=canvas.clientWidth,h=canvas.clientHeight;
     const ratio=Math.min(devicePixelRatio,1.6);
     if (canvas.width!==Math.round(w*ratio)||canvas.height!==Math.round(h*ratio)) {
@@ -48,7 +46,9 @@ export class OverheadView {
     }
     const scale=h/(game.player.carId?102:74);
     c.setTransform(ratio,0,0,ratio,0,0);c.fillStyle='#419d9a';c.fillRect(0,0,w,h);
-    c.translate(w/2,h/2);c.scale(scale,scale);c.translate(-game.player.x,-game.player.z);
+    c.translate(w/2,h/2);c.scale(scale,scale);
+    if (!game.player.carId) c.rotate(-heading);
+    c.translate(-game.player.x,-game.player.z);
     c.drawImage(this.ground,-290,-290,580,580);
     for(const car of game.cars){
       c.save();c.translate(car.x,car.z);c.rotate(car.heading);
