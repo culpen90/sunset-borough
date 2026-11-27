@@ -61,7 +61,10 @@ test('complete every job through the controls, save mid-race and mid-pursuit, th
   run(game, 2, {brake: true});
   game.interact();
   assert.equal(game.player.carId, null);
-  run(game, 1, {x: 0.45, y: -0.93});
+  const pickup = game.cars.find(car => car.id === 'gullwing');
+  const bearing = Math.atan2(pickup.x - game.player.x, game.player.z - pickup.z);
+  const direction = bearing - game.player.heading;
+  run(game, 1, {x: Math.sin(direction), y: Math.cos(direction)});
   game.interact();
   assert.equal(game.player.carId, 'gullwing');
   assert.equal(game.wanted, 2);

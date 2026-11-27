@@ -1,4 +1,5 @@
 import { Game } from './game.js';
+import { FollowCamera } from './camera.js';
 import { drawMap } from './map.js';
 import { Soundscape } from './sound.js';
 
@@ -9,6 +10,7 @@ function read(key) { try { return localStorage.getItem(key); } catch (_) { retur
 function write(key, value) { try { localStorage.setItem(key, value); return true; } catch (_) { return false; } }
 function savedGame() { try { return JSON.parse(read(saveKey)); } catch (_) { return null; } }
 let game = new Game(savedGame()), view, panel = 'title', returnTo = 'title';
+const camera = new FollowCamera(game.player.heading);
 let loading = false, gameStarted = false, failedSave = false;
 let previousFrame = 0, accumulator = 0, hudAfter = 0, nextSave = 0, savedRevision = game.revision;
 let frameHandle = 0;
@@ -48,6 +50,7 @@ function save() {
 }
 function clearInput() {
   keys.clear();held.clear();stick.x=0;stick.y=0;stick.pointer=null;lookPointer=null;
+  game.player.moving = game.player.running = false;
   el('stick').firstElementChild.style.transform = '';
   document.querySelectorAll('.pressed').forEach(btn => btn.classList.remove('pressed'));
 }
@@ -93,7 +96,7 @@ async function play() {
       try {
         const { CityView } = await import('./world.js');
         view = new CityView(el('scene'));
-        view.render(game, 1/60);
+        view.render(game, 1/60, camera.heading);
       } catch (error) {
         console.warn('Switching to overhead view', error);
         view = await overhead();
@@ -197,11 +200,11 @@ function frame(stamp) {
     steeringHeld: !!(right || left),
     y: Math.min(1, Math.max(-1, stick.y + down('ArrowUp','KeyW') - down('ArrowDown','KeyS','reverse') + (driving ? down('boost') : 0))),
     run: !!down('ShiftLeft','ShiftRight','boost'), brake: !!down('Space','brake'),
-    reverse: !!down('ArrowDown','KeyS','reverse'),
-    cameraHeading: view.heading || 0
+    reverse: !!down('ArrowDown','KeyS','reverse')
   };
   while (accumulator >= 1/60) { game.update(1/60, input); accumulator -= 1/60; }
-  view.render(game, dt);sound.update(game);
+  camera.update(game, Math.min(dt, .10), lookPointer !== null);
+  view.render(game, dt, camera.heading);sound.update(game);
   if (game.time >= hudAfter) { refreshHUD(); hudAfter = game.time + .085; }
   if (game.time >= nextSave || game.revision !== savedRevision && !failedSave) save();
   frameHandle = requestAnimationFrame(frame);
@@ -242,9 +245,11 @@ look.addEventListener('pointerdown',ev => {
 });
 look.addEventListener('pointermove',ev => {
   if(ev.pointerId!==lookPointer)return;
-  view.orbit((lookX-ev.clientX)*.007);lookX=ev.clientX;
+  camera.orbit((lookX-ev.clientX)*.007, game.player.carId !== null);lookX=ev.clientX;
 });
-look.addEventListener('lostpointercapture',() => {lookPointer=null;});
+look.addEventListener('lostpointercapture',ev => {
+  if(ev.pointerId===lookPointer)lookPointer=null;
+});
 
 el('play').onclick=play;
 el('resume').onclick=() => setPanel('play');

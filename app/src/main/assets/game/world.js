@@ -5,7 +5,6 @@ import {buildings,streetAt} from './city.js';
 import {randomFrom} from './geometry.js';
 
 const clamp=THREE.MathUtils.clamp;
-const turn=(a,b)=>Math.atan2(Math.sin(b-a),Math.cos(b-a));
 const sidewalkHeight=(x,z)=>Math.abs(x-streetAt(x))>10 && Math.abs(z-streetAt(z))>10 ? .14 : 0;
 
 function sunset() {
@@ -110,7 +109,6 @@ export class CityView {
     this.shadows=blobShadows();this.scene.add(this.shadows);
     this.marker=destinationMarker();this.scene.add(this.marker);
     this.cars=new Map();this.peds=new Map();
-    this.heading=0;this.manualCamera=0;
     this.follow=new THREE.Vector3();this.look=new THREE.Vector3();
     this.shadowTransform=new THREE.Object3D();this.firstFrame=true;
     this.heroAnim={phase:0,amplitude:0};
@@ -123,10 +121,6 @@ export class CityView {
     this.width=w;this.height=h;
     this.renderer.setSize(w,h,false);this.camera.aspect=w/h;
     this.camera.updateProjectionMatrix();
-  }
-  orbit(deltaYaw) {
-    if(!Number.isFinite(deltaYaw))return;
-    this.heading+=deltaYaw;this.manualCamera=2.4;
   }
   addShadow(x,z,w,d,heading) {
     const count=this.shadows.count;
@@ -189,19 +183,14 @@ export class CityView {
       for(const [id,actor] of cache)if(!actor.seen){this.scene.remove(actor.mesh);cache.delete(id);}
     }
   }
-  render(game,dt) {
+  render(game,dt,heading) {
     if(!game || !game.player)return;
     this.resize();
     const rawDelta=Number.isFinite(dt)?dt:0;
     dt=clamp(rawDelta,0,.10);
     const p=game.player,car=p.carId!=null?game.cars.find(v=>v.id===p.carId):null;
-    this.manualCamera=Math.max(0,this.manualCamera-dt);
     const speed=Math.abs(car?.speed || 0);
-    if(car && this.manualCamera<=0) {
-      const delta=turn(this.heading,p.heading);
-      this.heading+=delta*(1-Math.exp(-dt*(speed>1?4.5:2.2)));
-    }
-    const s=Math.sin(this.heading),c=Math.cos(this.heading);
+    const s=Math.sin(heading),c=Math.cos(heading);
     const dist=car?7.3+Math.min(2,speed*.032):4.42;
     const side=car?0:1.05;
     const goalHeight=car?2.98+Math.min(.45,speed*.009):2.12;

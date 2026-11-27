@@ -389,10 +389,12 @@ export class Game {
     const x = clamp(finite(input.x, 0), -1, 1), y = clamp(finite(input.y, 0), -1, 1);
     const magnitude = Math.hypot(x, y);
     const p = this.player;
+    // Keep a held stick on course while the follow camera swings behind the player.
+    if (!p.moving) this.walkBasis = finite(input.cameraHeading, p.heading);
     p.moving = magnitude > 0.08;
     p.running = p.moving && !!input.run;
     if (!p.moving) return;
-    const heading = finite(input.cameraHeading, 0) + Math.atan2(x, y);
+    const heading = this.walkBasis + Math.atan2(x, y);
     const distance = (p.running ? 9.3 : 5.5) * dt * Math.min(1, magnitude);
     const dx = Math.sin(heading) * distance, dz = -Math.cos(heading) * distance;
     p.heading += angleDiff(heading, p.heading) * (1 - Math.exp(-18 * dt));
