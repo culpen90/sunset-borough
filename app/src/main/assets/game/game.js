@@ -3,6 +3,7 @@ import {acquireLane, cruiseSteering, laneEndDistance, laneOffsets} from './cruis
 import {cruiseSpeed, pedalBraking} from './cruise-speed.js';
 
 const TAU = 2 * Math.PI;
+const SIDEWAYS_MAX_SLOPE = Math.tan(Math.PI / 8);
 const clamp = (n, low, high) => Math.min(high, Math.max(low, n));
 const gap = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const finite = (n, fallback) => Number.isFinite(n) ? n : fallback;
@@ -181,7 +182,7 @@ function patrolRoute(car, player) {
 
 export class Game {
   constructor(save = null) {
-    this.player = {x: 5, z: 7, heading: 0, carId: null, moving: false, running: false, strikeTime: 0};
+    this.player = {x: 5, z: 7, heading: 0, carId: null, moving: false, running: false, backpedaling: false, strikeTime: 0};
     const hero = createCar(COUPE, 'coupe', 0x0dafa6, 5, 0, 0);
     hero.owner = 'personal';
     this.cars = [hero, ...ambientCars()];
@@ -322,7 +323,7 @@ export class Game {
         const x = current.x + Math.sin(current.heading + angle) * 3;
         const z = current.z - Math.cos(current.heading + angle) * 3;
         if (!isOpen(x, z, 0.48) || this.cars.some(c => c !== current && Math.hypot(x - c.x, z - c.z) < 2)) continue;
-        Object.assign(this.player, {x, z, carId: null, heading: current.heading, moving: false, running: false});
+        Object.assign(this.player, {x, z, carId: null, heading: current.heading, moving: false, running: false, backpedaling: false});
         this.cancelCruise();
         current.speed = 0;
         this.revision++;
@@ -337,7 +338,7 @@ export class Game {
     car.route = null;
     car.owner = 'personal';
     car.speed = 0;
-    Object.assign(this.player, {x: car.x, z: car.z, heading: car.heading, carId: car.id, moving: false, running: false});
+    Object.assign(this.player, {x: car.x, z: car.z, heading: car.heading, carId: car.id, moving: false, running: false, backpedaling: false});
     this.revision++;
     if (this.missionIndex === 0 && this.stage === 0) {
       this.stage = 1;
@@ -389,15 +390,23 @@ export class Game {
     const x = clamp(finite(input.x, 0), -1, 1), y = clamp(finite(input.y, 0), -1, 1);
     const magnitude = Math.hypot(x, y);
     const p = this.player;
-    // Keep a held stick on course while the follow camera swings behind the player.
-    if (!p.moving) this.walkBasis = finite(input.cameraHeading, p.heading);
-    p.moving = magnitude > 0.08;
-    p.running = p.moving && !!input.run;
-    if (!p.moving) return;
+    const moving = magnitude > 0.08;
+    // Treat the three rear stick directions as backsteps. A near-horizontal drag is a side turn.
+    const backpedaling = moving && y < -Math.abs(x) * SIDEWAYS_MAX_SLOPE;
+    // Start a backstep relative to the view, even when sliding the stick down mid-turn.
+    // Hold that reference for the gesture so camera follow cannot steer the character.
+    if (!p.moving || (backpedaling && !p.backpedaling)) {
+      this.walkBasis = backpedaling ? finite(input.cameraHeading, p.heading) : p.heading;
+    }
+    p.moving = moving;
+    p.running = moving && !!input.run;
+    p.backpedaling = backpedaling;
+    if (!moving) return;
     const heading = this.walkBasis + Math.atan2(x, y);
     const distance = (p.running ? 9.3 : 5.5) * dt * Math.min(1, magnitude);
     const dx = Math.sin(heading) * distance, dz = -Math.cos(heading) * distance;
-    p.heading += angleDiff(heading, p.heading) * (1 - Math.exp(-18 * dt));
+    const facing = p.backpedaling ? this.walkBasis : heading;
+    p.heading += angleDiff(facing, p.heading) * (1 - Math.exp(-18 * dt));
     const open = (x, z) => isOpen(x, z, 0.46) && !this.cars.some(c => Math.hypot(c.x - x, c.z - z) < 1.55);
     if (open(p.x + dx, p.z)) p.x += dx;
     if (open(p.x, p.z + dz)) p.z += dz;
@@ -465,7 +474,7 @@ export class Game {
       car.speed = 0;
     }
     const p = this.player;
-    Object.assign(p, {x: car.x, z: car.z, heading: car.heading, moving: false, running: false});
+    Object.assign(p, {x: car.x, z: car.z, heading: car.heading, moving: false, running: false, backpedaling: false});
   }
 
   moveTraffic(dt, current) {
@@ -636,7 +645,7 @@ export class Game {
     if (this.car) this.car.speed = 0;
     const hero = this.cars.find(c => c.id === COUPE);
     Object.assign(hero, {x: 5, z: 0, heading: 0, speed: 0});
-    Object.assign(this.player, {x: 5, z: 7, heading: 0, carId: null, moving: false, running: false});
+    Object.assign(this.player, {x: 5, z: 7, heading: 0, carId: null, moving: false, running: false, backpedaling: false});
     if (this.missionIndex === 1) {
       this.stage = 0;
       this.remainingTime = null;

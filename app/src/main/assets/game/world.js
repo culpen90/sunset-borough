@@ -134,7 +134,9 @@ export class CityView {
     const x=p.x,z=p.z;
     const traveled=Number.isFinite(anim.x)?Math.hypot(x-anim.x,z-anim.z):0;
     const speed=clamp(traveled/Math.max(dt,.001),0,8);
-    anim.x=x;anim.z=z;anim.phase+=Math.min(traveled,.75)*3.5;
+    anim.x=x;anim.z=z;
+    const strideDirection=hero && p.backpedaling ? -1 : 1;
+    anim.phase+=strideDirection*Math.min(traveled,.75)*3.5;
     anim.amplitude+=(Math.min(1,speed*.41)-anim.amplitude)*(1-Math.exp(-dt*12));
     const stride=Math.sin(anim.phase)*anim.amplitude;
     mesh.position.set(x,sidewalkHeight(x,z)+Math.abs(Math.cos(anim.phase))*anim.amplitude*.041,z);

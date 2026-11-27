@@ -14,7 +14,7 @@ function onFoot(heading = 0) {
   const camera = new FollowCamera(heading);
   function advance(frames, input = {}, looking = false, stepsPerRender = 1) {
     for (let i = 0; i < frames; i++) {
-      for (let step = 0; step < stepsPerRender; step++) game.update(frame, input);
+      for (let step = 0; step < stepsPerRender; step++) game.update(frame, {...input, cameraHeading: camera.heading});
       camera.update(game, stepsPerRender * frame, looking);
     }
   }
@@ -32,7 +32,7 @@ function gentleTurn(before, after, dt) {
     `Camera turned ${degrees.toFixed(2)}° in ${(1000 * dt).toFixed(1)} ms`);
 }
 
-test('reversing the stick eases the view behind the character at 60 and 10 FPS', () => {
+test('turning the stick sideways eases the view behind the character at 60 and 10 FPS', () => {
   for (const stepsPerRender of [1, 6]) {
     const {player, camera, advance} = onFoot();
     advance(30, {y: 1});
@@ -40,11 +40,11 @@ test('reversing the stick eases the view behind the character at 60 and 10 FPS',
     const dt = stepsPerRender * frame;
     for (let steps = 0; steps < 360; steps += stepsPerRender) {
       const before = camera.heading;
-      advance(1, {y: -1}, false, stepsPerRender);
+      advance(1, {x: 1}, false, stepsPerRender);
       gentleTurn(before, camera.heading, dt);
       if (steps + stepsPerRender === 6) facing(camera.heading, initial, 4 * Math.PI / 180);
     }
-    facing(player.heading, Math.PI);
+    facing(player.heading, Math.PI / 2);
     facing(camera.heading, player.heading);
   }
 });
@@ -82,20 +82,53 @@ test('a held swipe overrides follow while walking and releasing it restores foll
   facing(camera.heading, player.heading);
 });
 
-test('holding sideways or backward walks straight as the camera follows the turn', () => {
-  for (const [input, heading] of [[{x: 1}, Math.PI / 2], [{y: -1}, Math.PI]]) {
-    const {player, camera, advance} = onFoot();
-    advance(360, input);
-    assert.ok(Math.abs(player.x * Math.cos(heading) + player.z * Math.sin(heading)) < 0.01);
-    assert.ok(player.x * Math.sin(heading) - player.z * Math.cos(heading) > 8);
-    facing(player.heading, heading);
-    facing(camera.heading, heading);
-
+test('holding or repeating down backpedals without turning the player or camera', () => {
+  const heading = Math.PI / 2;
+  const {player, camera, advance} = onFoot(heading);
+  advance(30, {y: 1});
+  for (let pull = 0; pull < 2; pull++) {
+    for (let i = 0; i < 180; i++) {
+      const x = player.x;
+      advance(1, {y: -1});
+      assert.ok(player.x < x);
+      assert.ok(Math.abs(player.z) < 0.001);
+      facing(player.heading, heading);
+      facing(camera.heading, heading);
+    }
     advance(1);
-    const {x, z} = player;
-    advance(30, {y: 1});
-    assert.ok((player.x - x) * Math.sin(heading) - (player.z - z) * Math.cos(heading) > 2);
   }
+  const x = player.x;
+  advance(30, {y: 1});
+  assert.ok(player.x > x + 2);
+});
+
+test('a diagonal backstep uses the view after idle free look', () => {
+  const {player, camera, advance} = onFoot();
+  camera.orbit(Math.PI, false);
+  advance(30, {x: 0.5, y: -0.5});
+  assert.ok(player.z < -1 && player.x < -1);
+  assert.ok(Math.abs(player.x - player.z) < 0.001);
+  facing(player.heading, Math.PI);
+});
+
+test('sliding a held stick from sideways to down backs up along the new camera heading', () => {
+  const {player, camera, advance} = onFoot();
+  advance(240, {x: 1});
+  assert.ok(player.x > 8 && Math.abs(player.z) < 0.001);
+  facing(camera.heading, Math.PI / 2);
+  const {x, z} = player;
+  advance(30, {y: -1});
+  assert.ok(player.x < x - 2 && Math.abs(player.z - z) < 0.01);
+  facing(player.heading, Math.PI / 2);
+});
+
+test('a small downward drift on a sideways drag keeps the player moving to the side', () => {
+  const {player, advance} = onFoot();
+  advance(240, {x: 1});
+  const {x, z} = player;
+  advance(30, {x: 1, y: -0.05});
+  assert.ok(player.x > x + 2 && Math.abs(player.z - z) < 0.2);
+  facing(player.heading, Math.atan2(1, -0.05));
 });
 
 test('following a stationary turn across the angle boundary takes the shorter path', () => {

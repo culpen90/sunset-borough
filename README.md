@@ -12,7 +12,7 @@ Download the signed APK from [GitHub Releases](https://github.com/culpen90/sunse
 adb install -r Sunset-Borough-1.3.1.apk
 ```
 
-In landscape, drag the left stick to walk and swipe the street view to look around. While standing still, you can leave the camera at any angle. When you walk again or reverse direction, the camera eases back behind your character. Use **Enter car** beside the coupe. Hold **Gas** with your right thumb and steer with your left. Use **Brake** to slow down and **Reverse** to back up. The gold marker and radar route lead to your next objective. Tap the radar for the full city map.
+In landscape, drag the left stick to walk and swipe the street view to look around. Pull the stick down to backpedal toward the camera. While standing still, you can leave the camera at any angle. When you walk again, the camera eases back behind your character. Use **Enter car** beside the coupe. Hold **Gas** with your right thumb and steer with your left. Use **Brake** to slow down and **Reverse** to back up. The gold marker and radar route lead to your next objective. Tap the radar for the full city map.
 
 Line up in a lane and tap **Set cruise** to hold your speed and keep the car between the lines. Steer through junctions as usual. The HUD shows **You steer** while you have the wheel. After you release steering for a quarter second, cruise straightens out an early or wide turn and centers the car in the outgoing lane. Steer again at any time to correct it yourself.
 
