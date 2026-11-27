@@ -6,10 +6,10 @@ A single-player, offline Android driving game set in a fictional coastal city. T
 
 ## Play on Android
 
-Download the signed APK from [GitHub Releases](https://github.com/culpen90/sunset-borough/releases/latest) and open it on your Android device. Sunset Borough requires Android 8.0 or newer and an up-to-date Android System WebView. To install version 1.4.0 with Android platform tools, run the following command from your download directory.
+Download the signed APK from [GitHub Releases](https://github.com/culpen90/sunset-borough/releases/latest) and open it on your Android device. Sunset Borough requires Android 8.0 or newer and an up-to-date Android System WebView. To install version 1.5.0 with Android platform tools, run the following command from your download directory.
 
 ```sh
-adb install -r Sunset-Borough-1.4.0.apk
+adb install -r Sunset-Borough-1.5.0.apk
 ```
 
 In landscape, push the left stick up to walk where the camera is looking, move it left or right to walk across the screen, or pull it down to backpedal. To round a corner, hold the stick up and swipe the right side of the street view in the direction you want to turn. When you lift your right thumb, the camera keeps its angle.
