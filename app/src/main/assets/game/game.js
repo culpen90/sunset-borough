@@ -247,6 +247,7 @@ export class Game {
   get district() { return districtAt(this.player.x, this.player.z); }
   get speedKph() { return Math.round(Math.abs(this.car?.speed || 0) * 3.6); }
   get maxCruiseKph() { return this.car ? Math.floor(topSpeed(this.car) * 3.6) : 0; }
+  get cruiseUnlocked() { return this.completed >= 2; }
 
   toggleCruise() {
     if (this.cruise.active) {
@@ -254,7 +255,7 @@ export class Game {
       return;
     }
     const car = this.car;
-    if (!car) return;
+    if (!car || !this.cruiseUnlocked) return;
     const stoppingDistance = 1 + car.speed ** 2 / (2 * END_BRAKING);
     const occupied = occupiedLane(car);
     const lane = occupied ?? recoveryLane(car, stoppingDistance);
@@ -283,7 +284,7 @@ export class Game {
   }
 
   cycleCruiseGap() {
-    if (!this.car) return;
+    if (!this.car || !this.cruiseUnlocked) return;
     this.cruise.gapCars = this.cruise.gapCars % MAX_GAP_CARS + 1;
   }
 
@@ -708,7 +709,10 @@ export class Game {
   }
 
   finishJob(reward) {
-    this.message(this.missionTitle + ' complete  +$' + reward, 5);
+    const winsCruise = this.missionIndex === 1 && !this.cruiseUnlocked;
+    const completion = this.missionTitle + ' complete  +$' + reward;
+    if (winsCruise) this.message(completion + ' • Adaptive Cruise Control unlocked', 7);
+    else this.message(completion, 5);
     this.cash += reward;
     this.missionIndex++;
     this.completed = Math.max(this.completed, this.missionIndex);
@@ -751,7 +755,9 @@ export class Game {
         this.stage++;
         if (this.stage === 1) {
           this.remainingTime = RACE_TIME;
-          this.message('Clock started • Cross all three gates');
+          this.message(this.cruiseUnlocked
+            ? 'Clock started • Cross all three gates'
+            : 'Beat the clock to win Adaptive Cruise Control');
         } else this.message('Gate cleared', 1.8);
         this.revision++;
       }

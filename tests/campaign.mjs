@@ -45,10 +45,12 @@ test('complete every job through the controls, save mid-race and mid-pursuit, th
   driveTo(game, 5, -80);
   driveTo(game, 161, -80);
   assert.equal(game.cash, 450);
+  assert.equal(game.cruiseUnlocked, false);
 
   driveTo(game, 165, -145);
   assert.ok(game.remainingTime > 0);
   game = resume(game);
+  assert.equal(game.cruiseUnlocked, false);
   driveTo(game, 165, -160);
   driveTo(game, 4, -160);
   driveTo(game, -156, -160);
@@ -56,6 +58,8 @@ test('complete every job through the controls, save mid-race and mid-pursuit, th
   driveTo(game, -155, 80);
   assert.equal(game.cash, 1230);
   assert.equal(game.missionTitle, 'Hot Property');
+  assert.equal(game.cruiseUnlocked, true);
+  assert.match(game.notice, /Adaptive Cruise Control unlocked/);
 
   driveTo(game, -155, 151);
   run(game, 2, {brake: true});
@@ -69,6 +73,7 @@ test('complete every job through the controls, save mid-race and mid-pursuit, th
   assert.equal(game.player.carId, 'gullwing');
   assert.equal(game.wanted, 2);
   game = resume(game);
+  assert.equal(game.cruiseUnlocked, true);
   driveTo(game, 165, 160);
   if (game.wanted) {
     driveTo(game, 165, 238);
@@ -83,4 +88,35 @@ test('complete every job through the controls, save mid-race and mid-pursuit, th
   game.replayJobs();
   assert.equal(game.missionTitle, 'Night Dispatch');
   assert.equal(game.cash, 2430);
+  assert.equal(game.cruiseUnlocked, true);
+  assert.equal(resume(game).cruiseUnlocked, true);
+});
+
+test('cruise and its gap control are locked in a new game', () => {
+  const game = new Game();
+  game.interact();
+  assert.ok(game.car);
+  assert.equal(game.cruiseUnlocked, false);
+  game.toggleCruise();
+  game.cycleCruiseGap();
+  assert.equal(game.cruise.active, false);
+  assert.equal(game.cruise.gapCars, 2);
+});
+
+test('an expired Boulevard Run leaves cruise control locked', () => {
+  const game = new Game({version: 2, missionIndex: 1, stage: 1, remainingTime: 0.5});
+  game.interact();
+  run(game, 1);
+  assert.equal(game.remainingTime, null);
+  assert.equal(game.stage, 0);
+  assert.equal(game.cruiseUnlocked, false);
+  game.toggleCruise();
+  assert.equal(game.cruise.active, false);
+});
+
+test('legacy saves credit a completed Boulevard Run toward the cruise unlock', () => {
+  const raceWon = new Game({version: 1, missionIndex: 2, completed: 2});
+  const replaying = new Game({version: 1, missionIndex: 0, completed: 3});
+  assert.equal(raceWon.cruiseUnlocked, true);
+  assert.equal(replaying.cruiseUnlocked, true);
 });
