@@ -158,8 +158,10 @@ function refreshCruiseHUD() {
 
 function refreshHUD() {
   const driving = game.player.carId != null;
+  const showCruise = driving && game.cruiseUnlocked;
   const action = game.actionLabel;
   el('stick').hidden = driving;el('steer').hidden = !driving;
+  el('cruiseControls').hidden = !showCruise;
   el('brake').hidden = el('reverse').hidden = !driving;
   el('strike').hidden = driving;el('speed').hidden = !driving;
   el('action').hidden = !action;
@@ -176,7 +178,7 @@ function refreshHUD() {
   const timer = seconds == null ? '' : Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2,'0');
   setText('range', [range, timer].filter(Boolean).join('  ·  '));
   setText('district', game.district);
-  if (driving) refreshCruiseHUD();
+  if (showCruise) refreshCruiseHUD();
   if (driving && el('speed').dataset.value !== String(game.speedKph)) {
     el('speed').dataset.value = String(game.speedKph);
     el('speed').textContent = game.speedKph;

@@ -109,7 +109,7 @@ test('amber lets an already committed driver clear while a driver with room to b
 
 test('adaptive cruise waits on red, resumes on green, and keeps the gas override', () => {
   for (const override of [false, true]) {
-    const game = new Game();
+    const game = new Game({version: 2, completed: 2});
     game.interact();
     const car = game.car;
     Object.assign(car, {x: 2.545, z: 37, heading: 0, speed: 9});

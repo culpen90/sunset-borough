@@ -4,13 +4,14 @@ import {Game} from '../app/src/main/assets/game/game.js';
 import {signalAt} from '../app/src/main/assets/game/traffic-lights.js';
 
 const frame = 1 / 60;
+const completedRaceSave = {version: 2, completed: 2};
 
 function run(game, seconds, input = {}) {
   for (let i = 0; i < Math.round(seconds * 60); i++) game.update(frame, input);
 }
 
 function driving(pose = {}) {
-  const game = new Game();
+  const game = new Game(completedRaceSave);
   game.interact();
   game.cars = [game.car];
   game.peds = [];
@@ -184,7 +185,7 @@ test('chooses the nearest same-lane lead amid crossing, oncoming and adjacent ca
 });
 
 test('adjusts following distance behind moving traffic and stays straight when the lead turns', () => {
-  const game = new Game();
+  const game = new Game(completedRaceSave);
   game.interact();
   const lead = game.cars.find(car => car.id === 'traffic-36');
   const straight = lead.route.segments.find(s => s.heading === 0 && s.size > 190);
@@ -251,7 +252,7 @@ test('can turn onto the cross street while cruise slows for the last junction', 
 
 test('keeps the selected bumper gap as stopped traffic starts moving again', () => {
   for (const gapCars of [1, 2, 3]) {
-    const game = new Game();
+    const game = new Game(completedRaceSave);
     game.interact();
     const lead = game.cars.find(car => car.id === 'traffic-36');
     const straight = lead.route.segments.find(s => s.heading === 0 && s.size > 190);
@@ -435,7 +436,7 @@ test('accelerator override keeps the set speed and restores it on release', () =
 });
 
 test('engages from rest in the starting coupe and clears on restore and exit', () => {
-  const game = new Game();
+  const game = new Game(completedRaceSave);
   game.toggleCruise();
   assert.equal(game.cruise.active, false);
   game.interact();
@@ -444,6 +445,7 @@ test('engages from rest in the starting coupe and clears on restore and exit', (
   game.cycleCruiseGap();
   const restored = new Game(JSON.parse(JSON.stringify(game.serialize())));
   assert.equal(restored.car.id, game.car.id);
+  assert.equal(restored.cruiseUnlocked, true);
   assert.equal(restored.cruise.active, false);
   assert.equal(restored.cruise.gapCars, 3);
   game.interact();
